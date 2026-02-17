@@ -8,6 +8,10 @@ import { HoldingsSection } from "@/components/holdings-section"
 import { FactorsSection } from "@/components/factors-section"
 import { IncomeSection } from "@/components/income-section"
 import { RiskSection } from "@/components/risk-section"
+import { LeverageProbeSection } from "@/components/leverage-probe-section"
+import { DriftRegimeSection } from "@/components/drift-regime-section"
+import { LiquiditySection } from "@/components/liquidity-section"
+import { ConfidenceSection } from "@/components/confidence-section"
 import { FundComparison } from "@/components/fund-comparison"
 import {
   cefUniverse,
@@ -21,6 +25,10 @@ import {
   AlertTriangle,
   LayoutDashboard,
   GitCompare,
+  Crosshair,
+  Activity,
+  Droplets,
+  ShieldCheck,
 } from "lucide-react"
 
 // ─── View Modes ─────────────────────────────────────────────────────────────
@@ -28,10 +36,14 @@ import {
 type ViewMode = "overview" | "fund-detail" | "comparison"
 
 const fundDetailTabs = [
-  { id: "holdings", label: "Holdings", icon: PieChart },
-  { id: "factors", label: "Factors", icon: BarChart3 },
-  { id: "income", label: "Income", icon: DollarSign },
-  { id: "risk", label: "Risk", icon: AlertTriangle },
+  { id: "holdings", label: "1. Holdings", icon: PieChart },
+  { id: "factors", label: "2. Factors", icon: BarChart3 },
+  { id: "income", label: "3. NAV/Market", icon: DollarSign },
+  { id: "leverage", label: "4. Leverage", icon: Crosshair },
+  { id: "distribution", label: "5. Distribution", icon: DollarSign },
+  { id: "drift", label: "6. Drift", icon: Activity },
+  { id: "liquidity", label: "7. Liquidity", icon: Droplets },
+  { id: "confidence", label: "8. Confidence", icon: ShieldCheck },
 ] as const
 
 type FundDetailTab = (typeof fundDetailTabs)[number]["id"]
@@ -149,13 +161,17 @@ export default function Page() {
           />
         )}
 
-        {/* Fund Detail (per-fund analysis) */}
+        {/* Fund Detail (per-fund analysis, 8-section X-ray) */}
         {viewMode === "fund-detail" && (
           <>
             {activeDetailTab === "holdings" && <HoldingsSection data={selectedProfile} />}
             {activeDetailTab === "factors" && <FactorsSection data={selectedProfile} />}
-            {activeDetailTab === "income" && <IncomeSection data={selectedProfile} />}
-            {activeDetailTab === "risk" && <RiskSection data={selectedProfile} />}
+            {activeDetailTab === "income" && <RiskSection data={selectedProfile} />}
+            {activeDetailTab === "leverage" && <LeverageProbeSection data={selectedProfile} />}
+            {activeDetailTab === "distribution" && <IncomeSection data={selectedProfile} />}
+            {activeDetailTab === "drift" && <DriftRegimeSection data={selectedProfile} />}
+            {activeDetailTab === "liquidity" && <LiquiditySection data={selectedProfile} />}
+            {activeDetailTab === "confidence" && <ConfidenceSection data={selectedProfile} />}
           </>
         )}
 
@@ -172,7 +188,7 @@ export default function Page() {
       {/* Footer */}
       <footer className="border-t border-border px-6 py-3">
         <p className="text-center text-xs text-muted-foreground">
-          Top 10 CEF Analytics Dashboard | {cefUniverse.length} Funds | Z-Score + PSI Ranking | Not investment advice
+          Top 10 CEF X-Ray Dashboard | {cefUniverse.length} Funds | 8-Section Analytics | Z-Score + PSI Ranking | Not investment advice
         </p>
       </footer>
     </div>

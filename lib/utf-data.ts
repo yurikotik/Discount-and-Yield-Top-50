@@ -114,6 +114,70 @@ export interface FundRanking {
   psiResult: PSIResult
 }
 
+// ─── Leverage & Derivatives Probe Types ─────────────────────────────────────
+
+export interface LeverageProbe {
+  realizedVsReconstructed: number // residual monthly %
+  residualFlagged: boolean
+  impliedNotional: number // estimated notional from derivatives in $M
+  likelyInstruments: string[]
+  returnResiduals: { period: string; residual: number }[]
+}
+
+// ─── Drift & Regime Detection Types ─────────────────────────────────────────
+
+export interface DriftMetric {
+  date: string
+  rolling30d: number // factor drift magnitude
+  rolling90d: number
+}
+
+export interface RegimeShift {
+  date: string
+  factor: string
+  direction: "increase" | "decrease"
+  magnitude: number
+  significance: "major" | "minor"
+}
+
+export interface DriftRegimeData {
+  driftTimeSeries: DriftMetric[]
+  regimeShifts: RegimeShift[]
+  currentRegime: "stable" | "transitioning" | "volatile"
+  changePointCount: number
+}
+
+// ─── Liquidity & Execution Types ────────────────────────────────────────────
+
+export interface HoldingLiquidity {
+  ticker: string
+  name: string
+  weight: number
+  advProxy: number // avg daily volume in $M
+  marketCap: number // in $B
+  liquidityScore: number // 0-100
+  daysToLiquidate: number
+}
+
+export interface LiquidityData {
+  holdings: HoldingLiquidity[]
+  overallIndex: number // 0-100
+  illiquidPct: number // % of portfolio in illiquid positions
+  largeIlliquidPositions: string[]
+}
+
+// ─── Confidence & Quality Types ─────────────────────────────────────────────
+
+export interface ConfidenceData {
+  qualityScore: number // 0-100
+  invalidationConditions: string[]
+  holdingsAge: number // days since last disclosure
+  dataCompleteness: number // 0-100
+  swapDisclosureRisk: "low" | "medium" | "high"
+  distributionScore: number // 0-100 sustainability
+  distributionRedFlags: string[]
+}
+
 // ─── Formatters ─────────────────────────────────────────────────────────────
 
 export function formatCurrency(value: number): string {

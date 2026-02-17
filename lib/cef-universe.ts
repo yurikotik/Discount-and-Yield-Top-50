@@ -15,6 +15,13 @@ import {
   type ZScoreVector,
   type PSIResult,
   type FundRanking,
+  type LeverageProbe,
+  type DriftRegimeData,
+  type DriftMetric,
+  type RegimeShift,
+  type LiquidityData,
+  type HoldingLiquidity,
+  type ConfidenceData,
   formatCurrency,
   formatPercent,
   formatBps,
@@ -53,6 +60,10 @@ export interface CEFProfile {
   performance: PerformanceMetrics
   risk: RiskMetrics
   caveats: string[]
+  leverageProbe: LeverageProbe
+  driftRegime: DriftRegimeData
+  liquidity: LiquidityData
+  confidence: ConfidenceData
 }
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
@@ -98,6 +109,143 @@ function generateDistributions(rate: number, price: number, months: number = 24)
     })
   }
   return records
+}
+
+// ─── X-Ray Data Generators ─────────────────────────────────────────────────
+
+function generateLeverageProbe(leverageRatio: number, leverageType: string): LeverageProbe {
+  const hasDerivatives = leverageType.includes("TRS") || leverageType.includes("swap") || leverageType.includes("CDS") || leverageType.includes("option")
+  const baseResidual = leverageRatio > 25 ? 0.8 + Math.random() * 1.2 : 0.2 + Math.random() * 0.6
+  const residual = hasDerivatives ? baseResidual * 1.4 : baseResidual
+  const flagged = residual > 1.0
+
+  const instruments: string[] = []
+  if (leverageType.includes("TRS")) instruments.push("Total Return Swaps")
+  if (leverageType.includes("swap")) instruments.push("Interest Rate Swaps")
+  if (leverageType.includes("CDS")) instruments.push("Credit Default Swaps")
+  if (leverageType.includes("option")) instruments.push("Options Overlay")
+  if (leverageType.includes("repos") || leverageType.includes("Reverse")) instruments.push("Reverse Repos")
+  if (leverageType.includes("facility")) instruments.push("Credit Facility")
+  if (instruments.length === 0) instruments.push("None detected")
+
+  const impliedNotional = hasDerivatives ? Math.round(leverageRatio * 8 + Math.random() * 100) : 0
+
+  return {
+    realizedVsReconstructed: parseFloat(residual.toFixed(2)),
+    residualFlagged: flagged,
+    impliedNotional,
+    likelyInstruments: instruments,
+    returnResiduals: [
+      { period: "30d", residual: parseFloat((residual * 0.3).toFixed(2)) },
+      { period: "90d", residual: parseFloat((residual * 0.7).toFixed(2)) },
+      { period: "1Y", residual: parseFloat(residual.toFixed(2)) },
+      { period: "2Y", residual: parseFloat((residual * 1.8).toFixed(2)) },
+    ],
+  }
+}
+
+function generateDriftRegime(navHistory: NAVPricePoint[], factors: FactorExposure[]): DriftRegimeData {
+  const driftTimeSeries: DriftMetric[] = navHistory.map((h, i) => {
+    const base30 = 0.02 + Math.sin(i * 0.4) * 0.015 + Math.random() * 0.01
+    const base90 = 0.015 + Math.sin(i * 0.2) * 0.01 + Math.random() * 0.008
+    return {
+      date: h.date,
+      rolling30d: parseFloat(base30.toFixed(4)),
+      rolling90d: parseFloat(base90.toFixed(4)),
+    }
+  })
+
+  const shiftFactors = factors.filter(f => f.significance === "high").slice(0, 3)
+  const regimeShifts: RegimeShift[] = [
+    { date: navHistory[Math.floor(navHistory.length * 0.3)]?.date || "Jun 24", factor: shiftFactors[0]?.factor || "Market Beta", direction: "increase", magnitude: 0.18, significance: "minor" },
+    { date: navHistory[Math.floor(navHistory.length * 0.7)]?.date || "Sep 25", factor: shiftFactors[1]?.factor || "Duration", direction: "decrease", magnitude: 0.32, significance: "major" },
+  ]
+
+  const maxDrift = Math.max(...driftTimeSeries.map(d => d.rolling30d))
+  const currentRegime: DriftRegimeData["currentRegime"] = maxDrift > 0.04 ? "volatile" : maxDrift > 0.025 ? "transitioning" : "stable"
+
+  return { driftTimeSeries, regimeShifts, currentRegime, changePointCount: regimeShifts.length }
+}
+
+function generateLiquidityData(holdings: Holding[], aum: number): LiquidityData {
+  const holdingLiquidity: HoldingLiquidity[] = holdings.map(h => {
+    const isLargeCap = h.marketValue > 100000000
+    const advProxy = isLargeCap ? 50 + Math.random() * 200 : 5 + Math.random() * 40
+    const marketCap = h.marketValue / (h.weight / 100) / 1e9 * (3 + Math.random() * 10)
+    const score = Math.min(100, Math.round(Math.log10(advProxy + 1) * 30 + (marketCap > 10 ? 20 : marketCap > 1 ? 10 : 0)))
+    const daysToLiq = Math.max(1, Math.round(h.marketValue / (advProxy * 1e6 * 0.2)))
+    return {
+      ticker: h.ticker,
+      name: h.name,
+      weight: h.weight,
+      advProxy: parseFloat(advProxy.toFixed(1)),
+      marketCap: parseFloat(marketCap.toFixed(1)),
+      liquidityScore: score,
+      daysToLiquidate: daysToLiq,
+    }
+  })
+
+  const weightedScore = holdingLiquidity.reduce((s, h) => s + h.liquidityScore * h.weight, 0) / Math.max(1, holdingLiquidity.reduce((s, h) => s + h.weight, 0))
+  const illiquidHoldings = holdingLiquidity.filter(h => h.liquidityScore < 40)
+  const illiquidPct = illiquidHoldings.reduce((s, h) => s + h.weight, 0)
+
+  return {
+    holdings: holdingLiquidity,
+    overallIndex: Math.round(weightedScore),
+    illiquidPct: parseFloat(illiquidPct.toFixed(1)),
+    largeIlliquidPositions: illiquidHoldings.filter(h => h.weight > 1.5).map(h => h.ticker),
+  }
+}
+
+function generateConfidence(profile: {
+  leverageRatio: number
+  leverageType: string
+  distributionRate: number
+  navReturn1Y: number
+  expenseRatio: number
+  caveats: string[]
+}): ConfidenceData {
+  const { leverageRatio, leverageType, distributionRate, navReturn1Y, expenseRatio, caveats } = profile
+
+  // Quality deductions
+  let quality = 85
+  if (leverageRatio > 30) quality -= 10
+  if (leverageType.includes("TRS") || leverageType.includes("swap")) quality -= 8
+  if (distributionRate > 10) quality -= 5
+  if (caveats.length > 3) quality -= 3
+  quality = Math.max(20, Math.min(100, quality + Math.round(Math.random() * 6 - 3)))
+
+  const holdingsAge = 45 + Math.round(Math.random() * 30) // 45-75 days
+  const dataCompleteness = leverageType.includes("None") ? 92 : 75 + Math.round(Math.random() * 15)
+  const swapRisk: ConfidenceData["swapDisclosureRisk"] = leverageType.includes("TRS") || leverageType.includes("swap") ? "high" : leverageRatio > 20 ? "medium" : "low"
+
+  // Distribution sustainability
+  const coverageRatio = navReturn1Y > 0 ? navReturn1Y / distributionRate : 0
+  let distScore = Math.round(coverageRatio * 80)
+  if (distScore > 100) distScore = 100
+  if (distScore < 0) distScore = 0
+  if (distributionRate > navReturn1Y * 1.5) distScore = Math.min(distScore, 35)
+
+  const redFlags: string[] = []
+  if (coverageRatio < 0.7) redFlags.push("Distribution exceeds NAV income by >30%")
+  if (distributionRate > 10) redFlags.push("Elevated distribution rate may include ROC")
+  if (expenseRatio > 2.5) redFlags.push("High expense ratio erodes net income coverage")
+  if (leverageRatio > 30) redFlags.push("Heavy leverage amplifies distribution risk in rate rises")
+
+  return {
+    qualityScore: quality,
+    invalidationConditions: [
+      `Holdings data is ${holdingsAge} days stale`,
+      ...(swapRisk !== "low" ? ["Undisclosed swap/derivative positions possible"] : []),
+      "Rapid intraday trading not captured in monthly snapshots",
+      "FX hedging positions not visible in equity holdings",
+    ],
+    holdingsAge,
+    dataCompleteness,
+    swapDisclosureRisk: swapRisk,
+    distributionScore: distScore,
+    distributionRedFlags: redFlags,
+  }
 }
 
 // ─── Fund Profiles ──────────────────────────────────────────────────────────
@@ -151,6 +299,10 @@ const utfProfile: CEFProfile = {
   performance: { return1Y: 15.6, return3Y: 8.2, return5Y: 7.8, returnYTD: 4.2, navReturn1Y: 11.2, priceReturn1Y: 15.6, volatility1Y: 14.8, sharpeRatio: 0.72, maxDrawdown1Y: -8.4, beta: 0.78 },
   risk: { leverageRatio: 22.4, leverageType: "Reverse repos + credit facility", leverageCost: "SOFR + 85bps", expenseRatio: 2.16, managementFee: 1.0, premiumDiscountCurrent: -5.79, premiumDiscount1YAvg: -3.8, premiumDiscountPercentile: 22, volatility90d: 12.6, volatility1Y: 14.8, drawdownFromPeak: -5.2, zScoreDiscount: -1.24 },
   caveats: ["Holdings disclosure lags ~60 days", "Reverse repo financing rates may shift with SOFR", "Active management alpha not captured by static analysis", "International holdings subject to undisclosed FX hedging"],
+  leverageProbe: null as unknown as LeverageProbe,
+  driftRegime: null as unknown as DriftRegimeData,
+  liquidity: null as unknown as LiquidityData,
+  confidence: null as unknown as ConfidenceData,
 }
 
 const pdiProfile: CEFProfile = {
@@ -202,6 +354,10 @@ const pdiProfile: CEFProfile = {
   performance: { return1Y: 11.8, return3Y: 5.4, return5Y: 4.2, returnYTD: 3.8, navReturn1Y: 7.6, priceReturn1Y: 11.8, volatility1Y: 11.2, sharpeRatio: 0.48, maxDrawdown1Y: -6.8, beta: 0.52 },
   risk: { leverageRatio: 38.2, leverageType: "Reverse repos + TRS + interest rate swaps", leverageCost: "SOFR + 75bps", expenseRatio: 3.42, managementFee: 1.70, premiumDiscountCurrent: 4.86, premiumDiscount1YAvg: 3.2, premiumDiscountPercentile: 72, volatility90d: 9.8, volatility1Y: 11.2, drawdownFromPeak: -3.8, zScoreDiscount: 0.88 },
   caveats: ["38% leverage amplifies all risks ~1.6x", "CLO equity positions are illiquid and mark-to-model", "Premium (+4.9%) creates entry risk", "EM sovereign exposure subject to gap risk", "Distribution may include return of capital"],
+  leverageProbe: null as unknown as LeverageProbe,
+  driftRegime: null as unknown as DriftRegimeData,
+  liquidity: null as unknown as LiquidityData,
+  confidence: null as unknown as ConfidenceData,
 }
 
 const rqiProfile: CEFProfile = {
@@ -253,6 +409,10 @@ const rqiProfile: CEFProfile = {
   performance: { return1Y: 13.8, return3Y: 7.1, return5Y: 6.4, returnYTD: 3.8, navReturn1Y: 10.6, priceReturn1Y: 13.8, volatility1Y: 16.2, sharpeRatio: 0.62, maxDrawdown1Y: -9.2, beta: 0.85 },
   risk: { leverageRatio: 25.1, leverageType: "Reverse repos + credit facility", leverageCost: "SOFR + 90bps", expenseRatio: 1.92, managementFee: 0.90, premiumDiscountCurrent: -5.47, premiumDiscount1YAvg: -4.2, premiumDiscountPercentile: 28, volatility90d: 14.8, volatility1Y: 16.2, drawdownFromPeak: -6.8, zScoreDiscount: -0.92 },
   caveats: ["Leverage amplifies rate sensitivity", "REIT NAV estimates lag actual values", "Concentration in data center/specialty REITs"],
+  leverageProbe: null as unknown as LeverageProbe,
+  driftRegime: null as unknown as DriftRegimeData,
+  liquidity: null as unknown as LiquidityData,
+  confidence: null as unknown as ConfidenceData,
 }
 
 // ─── Builder for remaining 7 funds ──────────────────────────────────────────
@@ -293,18 +453,31 @@ function buildCEF(seed: FundSeed): CEFProfile {
     { period: "1 Year", totalReturn: parseFloat((dr * 0.9).toFixed(1)), navReturn: parseFloat((dr * 0.55).toFixed(1)), premiumDiscountEffect: parseFloat((pd * 0.18).toFixed(1)), distributionReturn: parseFloat(dr.toFixed(2)), leverageEffect: parseFloat((-lev * 0.15).toFixed(1)) },
     { period: "2 Year", totalReturn: parseFloat((dr * 1.7).toFixed(1)), navReturn: parseFloat((dr * 1.0).toFixed(1)), premiumDiscountEffect: parseFloat((pd * 0.3).toFixed(1)), distributionReturn: parseFloat((dr * 2).toFixed(2)), leverageEffect: parseFloat((-lev * 0.32).toFixed(1)) },
   ]
-  return {
+  const navHist = generateNavHistory(overview.navPerShare, overview.marketPrice, lev > 25 ? 0.015 : 0.022)
+  const result: CEFProfile = {
     overview,
     holdings,
     sectors,
     factors,
     returnDecomposition: retDecomp,
-    navHistory: generateNavHistory(overview.navPerShare, overview.marketPrice, lev > 25 ? 0.015 : 0.022),
+    navHistory: navHist,
     distributions: generateDistributions(dr, overview.marketPrice),
     performance: seed.perf,
     risk: seed.riskData,
     caveats: seed.caveats,
+    leverageProbe: generateLeverageProbe(lev, seed.riskData.leverageType),
+    driftRegime: generateDriftRegime(navHist, factors),
+    liquidity: generateLiquidityData(holdings, overview.aum),
+    confidence: generateConfidence({
+      leverageRatio: lev,
+      leverageType: seed.riskData.leverageType,
+      distributionRate: dr,
+      navReturn1Y: seed.perf.navReturn1Y,
+      expenseRatio: overview.expenseRatio,
+      caveats: seed.caveats,
+    }),
   }
+  return result
 }
 
 const ptyProfile = buildCEF({
@@ -371,6 +544,29 @@ const dnpProfile = buildCEF({
 })
 
 // ─── Universe ───────────────────────────────────────────────────────────────
+
+// Hydrate X-ray fields for manually built profiles (UTF, PDI, RQI)
+for (const p of [utfProfile, pdiProfile, rqiProfile]) {
+  if (!p.leverageProbe || (p.leverageProbe as unknown) === null) {
+    p.leverageProbe = generateLeverageProbe(p.risk.leverageRatio, p.risk.leverageType)
+  }
+  if (!p.driftRegime || (p.driftRegime as unknown) === null) {
+    p.driftRegime = generateDriftRegime(p.navHistory, p.factors)
+  }
+  if (!p.liquidity || (p.liquidity as unknown) === null) {
+    p.liquidity = generateLiquidityData(p.holdings, p.overview.aum)
+  }
+  if (!p.confidence || (p.confidence as unknown) === null) {
+    p.confidence = generateConfidence({
+      leverageRatio: p.risk.leverageRatio,
+      leverageType: p.risk.leverageType,
+      distributionRate: p.overview.distributionRate,
+      navReturn1Y: p.performance.navReturn1Y,
+      expenseRatio: p.overview.expenseRatio,
+      caveats: p.caveats,
+    })
+  }
+}
 
 export const cefUniverse: CEFProfile[] = [
   utfProfile, pdiProfile, rqiProfile, ptyProfile, gofProfile,
