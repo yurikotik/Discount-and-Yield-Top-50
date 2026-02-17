@@ -27,7 +27,7 @@ export function DashboardHeader({ profile, fundCount, totalAum, viewMode }: Prop
         </div>
         <div>
           <h1 className="text-lg font-bold text-foreground">
-            Top 10 CEF Dashboard
+            CEF X-Ray Dashboard
           </h1>
           <p className="text-xs text-muted-foreground">
             {fundCount} closed-end funds | ${totalAum.toFixed(1)}B combined AUM | {viewLabels[viewMode] ?? ""}

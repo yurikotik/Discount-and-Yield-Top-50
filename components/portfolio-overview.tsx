@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import type { CEFProfile } from "@/lib/cef-universe"
 import { formatPercent, PILLAR_LABELS, PILLAR_WEIGHTS, type FundRanking, type PillarScores } from "@/lib/cef-universe"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function PortfolioOverview({ funds, rankings, selectedTicker, onSelectFund, onNavigateToFund }: Props) {
+  const [showAllCards, setShowAllCards] = useState(false)
   const totalAum = funds.reduce((s, f) => s + f.overview.aum, 0)
   const avgDist = funds.reduce((s, f) => s + f.overview.distributionRate, 0) / funds.length
   const avgLev = funds.reduce((s, f) => s + f.overview.leverageRatio, 0) / funds.length
@@ -69,8 +71,19 @@ export function PortfolioOverview({ funds, rankings, selectedTicker, onSelectFun
       </div>
 
       {/* Fund Grid */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-foreground">
+          {showAllCards ? `All ${funds.length} Funds` : `Top 10 Funds`} by Composite Score
+        </h3>
+        <button
+          onClick={() => setShowAllCards(!showAllCards)}
+          className="text-xs text-primary hover:underline"
+        >
+          {showAllCards ? "Show Top 10" : `Show All ${funds.length}`}
+        </button>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {funds.map((fund) => {
+        {(showAllCards ? funds : funds.filter(f => rankings.findIndex(r => r.ticker === f.overview.ticker) < 10)).map((fund) => {
           const o = fund.overview
           const isSelected = o.ticker === selectedTicker
           const rank = rankings.find(r => r.ticker === o.ticker)
@@ -130,19 +143,19 @@ export function PortfolioOverview({ funds, rankings, selectedTicker, onSelectFun
             <CardDescription>Yield 25% + Discount 25% + X-Ray 20% + Risk 15% + Momentum 15%</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="overflow-y-auto max-h-[600px]" style={{ height: Math.max(320, rankBarData.length * 18 + 40) }}>
+              <ResponsiveContainer width="100%" height={Math.max(320, rankBarData.length * 18 + 40)}>
                 <BarChart data={rankBarData} layout="vertical" margin={{ left: 8, right: 16 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="ticker" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} width={48} />
+                  <XAxis type="number" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="ticker" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} width={48} />
                   <RechartsTooltip
                     contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
                     formatter={(value: number) => [value.toFixed(2), "Score"]}
                   />
-                  <Bar dataKey="score" radius={[0, 4, 4, 0]} maxBarSize={16}>
+                  <Bar dataKey="score" radius={[0, 4, 4, 0]} maxBarSize={14}>
                     {rankBarData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.score >= 0 ? "#4a9eff" : "#f87171"} fillOpacity={1 - index * 0.06} />
+                      <Cell key={`cell-${index}`} fill={entry.score >= 0 ? "#4a9eff" : "#f87171"} fillOpacity={Math.max(0.3, 1 - index * 0.012)} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -188,7 +201,7 @@ export function PortfolioOverview({ funds, rankings, selectedTicker, onSelectFun
           <CardTitle className="text-sm text-foreground">Scoring Pillar Breakdown</CardTitle>
           <CardDescription>Per-fund 5-pillar scores (0-1 scale, higher is better)</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="max-h-[500px] overflow-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
@@ -235,9 +248,9 @@ export function PortfolioOverview({ funds, rankings, selectedTicker, onSelectFun
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-foreground">Cross-Fund Comparison</CardTitle>
-          <CardDescription>Key metrics across all 10 CEFs, ranked by composite score</CardDescription>
+          <CardDescription>Key metrics across all {funds.length} CEFs, ranked by composite score</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="max-h-[500px] overflow-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">

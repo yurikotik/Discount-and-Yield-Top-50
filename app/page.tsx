@@ -188,7 +188,7 @@ export default function Page() {
       {/* Footer */}
       <footer className="border-t border-border px-6 py-3">
         <p className="text-center text-xs text-muted-foreground">
-          Top 10 CEF X-Ray Dashboard | {cefUniverse.length} Funds | 8-Section Analytics | 5-Pillar Scoring | We Don{"'"}t Replicate &mdash; We Decode | Not investment advice
+          CEF X-Ray Dashboard | {cefUniverse.length} Funds | 8-Section Analytics | 5-Pillar Scoring | Barchart CSV 2026-02-13 | Not investment advice
         </p>
       </footer>
     </div>
