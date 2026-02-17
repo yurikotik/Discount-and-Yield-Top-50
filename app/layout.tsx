@@ -7,8 +7,8 @@ const _inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const _jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" });
 
 export const metadata: Metadata = {
-  title: 'UTF Analysis Dashboard | Cohen & Steers Infrastructure Fund',
-  description: 'Comprehensive analysis of Cohen & Steers Infrastructure Fund (NYSE: UTF) including holdings decomposition, factor attribution, proxy construction, hedge simulation, and implementation costs.',
+  title: 'Multi-CEF Analysis Platform | 10 Closed-End Fund Hedge Dashboard',
+  description: 'Institutional-grade analysis platform for 10 closed-end funds (UTF, PDI, RQI, PTY, GOF, EOS, STK, USA, UTG, DNP). Holdings decomposition, factor attribution, proxy construction, hedge simulation, synthetic fund aggregation, and $500M execution planning.',
   generator: 'v0.app',
   icons: {
     icon: [

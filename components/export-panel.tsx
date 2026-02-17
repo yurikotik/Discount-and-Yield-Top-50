@@ -2,27 +2,26 @@
 
 import { useState } from "react"
 import {
-  holdings,
-  sectorExposures,
-  factorExposures,
-  proxyBaskets,
-  hedgeStats,
-  costEstimates,
-  navPriceData,
-  confidenceScore,
-  invalidationRisks,
-  leverageProbe,
-  fundOverview,
-  concentrationMetrics,
-  inputChecklist,
-  herculesPrompt,
-  slippageTiers,
-  correlationRegimes,
-} from "@/lib/utf-data"
+  type CEFProfile,
+  type SyntheticHedgeFund,
+  formatCurrency,
+  multiCefHerculesPrompt,
+} from "@/lib/cef-universe"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Download, FileText, FileJson, File, CheckCircle2, Circle, Copy, Check, ClipboardList, Terminal } from "lucide-react"
+import {
+  Download,
+  FileText,
+  FileJson,
+  File,
+  CheckCircle2,
+  Copy,
+  Check,
+  Terminal,
+} from "lucide-react"
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function downloadFile(content: string, filename: string, type: string) {
   const blob = new Blob([content], { type })
@@ -36,124 +35,164 @@ function downloadFile(content: string, filename: string, type: string) {
   URL.revokeObjectURL(url)
 }
 
-function generateCSV(): string {
+function generateMultiCSV(profiles: CEFProfile[]): string {
   const lines = [
-    "Rank,Issuer,Ticker,Sector,Weight(%),MarketValue($),LiquidityScore,Country,ProxyWeight_Basket1(%),ProxyWeight_Basket2(%),ProxyWeight_Basket3(%)",
+    "Ticker,Fund,Rank,Holding,Sector,Weight(%),MarketValue($),Country,ProxyBasket1,Corr90d,TE(%),Confidence",
   ]
-
-  holdings.forEach((h) => {
-    const b1 = proxyBaskets[0].etfs.find((e) => e.ticker === h.ticker)?.weight || ""
-    const b2 = proxyBaskets[1].etfs.find((e) => e.ticker === h.ticker)?.weight || ""
-    const b3 = proxyBaskets[2].etfs.find((e) => e.ticker === h.ticker)?.weight || ""
-    lines.push(
-      `${h.rank},"${h.issuer}",${h.ticker},${h.sector},${h.weight},${h.marketValue},${h.liquidityScore},${h.country},${b1},${b2},${b3}`
-    )
+  profiles.forEach((p) => {
+    const basket = p.proxyBaskets[p.selectedProxyIndex]
+    p.holdings.slice(0, 10).forEach((h, i) => {
+      lines.push(
+        `${p.overview.ticker},"${p.overview.name}",${i + 1},"${h.name}",${h.sector},${h.weight},${h.marketValue},${h.country},"${basket?.tickers.join("/")}",${basket?.correlation.toFixed(3)},${basket?.trackingError.toFixed(2)},${p.confidence}`
+      )
+    })
   })
-
   return lines.join("\n")
 }
 
-function generateJSON(): string {
+function generateMultiJSON(profiles: CEFProfile[], syntheticFund: SyntheticHedgeFund): string {
   const data = {
-    fund: fundOverview,
-    concentration: concentrationMetrics,
-    factorExposures: factorExposures.map((f) => ({
-      factor: f.factor,
-      exposure: f.exposure,
-      tStat: f.tStat,
-      contribution: f.contribution,
-    })),
-    correlationMatrices: {
-      "90d": proxyBaskets.map((b) => ({
-        basket: b.name,
-        correlation: b.correlation90d,
+    platform: "Multi-CEF Analysis Dashboard",
+    generatedAt: "2026-02-17",
+    totalNotional: syntheticFund.totalNotional,
+    weightingRule: syntheticFund.weightingRule,
+    portfolioMetrics: syntheticFund.portfolioMetrics,
+    funds: profiles.map((p) => {
+      const basket = p.proxyBaskets[p.selectedProxyIndex]
+      return {
+        ticker: p.overview.ticker,
+        name: p.overview.name,
+        aum: p.overview.aum,
+        premiumDiscount: p.overview.premiumDiscount,
+        distributionRate: p.overview.distributionRate,
+        leverageRatio: p.overview.leverageRatio,
+        confidence: p.confidence,
+        bestProxy: {
+          tickers: basket?.tickers,
+          weights: basket?.weights,
+          correlation: basket?.correlation,
+          trackingError: basket?.trackingError,
+        },
+        hedgeStats: {
+          hedgeRatio: p.hedgeSimulation.hedgeRatio,
+          annualizedReturn: p.hedgeSimulation.annualizedReturn,
+          maxDrawdown: p.hedgeSimulation.maxDrawdown,
+          realizedTrackingError: p.hedgeSimulation.realizedTrackingError,
+        },
+        factors: p.factors.map((f) => ({
+          factor: f.factor,
+          exposure: f.exposure,
+          tStat: f.tStat,
+        })),
+        leverageProbe: {
+          flagged: p.leverageProbe.leverageDetected,
+          leverageEstimate: p.leverageProbe.estimatedLeverage,
+          unexplainedReturn: p.leverageProbe.unexplainedReturn,
+        },
+        caveats: p.caveats,
+      }
+    }),
+    syntheticFund: {
+      allocations: syntheticFund.allocations.map((a) => ({
+        ticker: a.ticker,
+        weight: a.weight,
+        notional: a.notional,
+        hedgeRatio: a.hedgeRatio,
+        correlation: a.correlation,
+        trackingError: a.trackingError,
+        slippage: a.slippage,
+        borrowCost: a.borrowCost,
       })),
-      "180d": proxyBaskets.map((b) => ({
-        basket: b.name,
-        correlation: b.correlation180d,
-      })),
-      stress: correlationRegimes.map((r) => ({
-        basket: r.basket,
-        stressCorrelation: r.stressCorr,
-        regimeStable: r.regimeStable,
-      })),
+      factorConcentration: syntheticFund.factorConcentration,
     },
-    hedgeStatistics: hedgeStats,
-    slippageAssumptions: costEstimates.map((c) => ({
-      component: c.component,
-      bps: c.bps,
-      dollarAmount: c.dollarAmount,
-      tier: c.tier,
-    })),
-    tieredSlippage: slippageTiers.map((t) => ({
-      notionalBand: t.notionalBand,
-      bidAskSlippage: t.bidAskSlippage,
-      marketImpact: t.marketImpact,
-      totalSlippage: t.totalSlippage,
-    })),
-    leverageProbe: {
-      flagged: leverageProbe.flagged,
-      unexplainedReturn: leverageProbe.unexplainedReturn,
-      leverageEstimate: leverageProbe.leverageEstimate,
-    },
-    confidence: confidenceScore,
   }
   return JSON.stringify(data, null, 2)
 }
 
-function generateMarkdown(): string {
-  return `# UTF Analysis Report - Advisor Explainer
-## Cohen & Steers Infrastructure Fund (NYSE: UTF)
-*As of ${fundOverview.asOfDate}*
+function generateMultiMarkdown(profiles: CEFProfile[], syntheticFund: SyntheticHedgeFund): string {
+  const m = syntheticFund.portfolioMetrics
+  let md = `# Multi-CEF Analysis Report - Advisor Explainer
+## Synthetic Hedge Fund: 10 Closed-End Funds
+*As of 2026-02-17 | $${(syntheticFund.totalNotional / 1e6).toFixed(0)}M Total Notional | ${syntheticFund.weightingRule} Weighting*
 
 ---
 
-### Fund Snapshot
+### Portfolio Overview
+
 | Metric | Value |
 |--------|-------|
-| NAV | $${fundOverview.nav.toFixed(2)} |
-| Market Price | $${fundOverview.marketPrice.toFixed(2)} |
-| Premium/Discount | ${fundOverview.premiumDiscount.toFixed(2)}% |
-| Distribution Rate | ${fundOverview.distributionRate}% |
-| Leverage | ${fundOverview.leverage}% |
-| Total Assets | $${(fundOverview.totalAssets / 1e9).toFixed(1)}B |
+| Total Notional | ${formatCurrency(syntheticFund.totalNotional)} |
+| Weighted Correlation | ${m.weightedCorrelation.toFixed(4)} |
+| Portfolio Tracking Error | ${m.portfolioTrackingError.toFixed(2)}% |
+| Diversification Ratio | ${m.diversificationRatio.toFixed(2)}x |
+| Aggregate Max Drawdown | ${formatCurrency(m.aggregateMaxDrawdown)} |
+| Total Borrow Cost | ${formatCurrency(m.totalBorrowCost)} |
+| Net Beta | ${m.netBeta.toFixed(4)} |
 
+### Per-Fund Summary
+
+| Ticker | AUM | P/D | Dist | Corr | TE | Conf |
+|--------|-----|-----|------|------|-----|------|
+`
+
+  profiles.forEach((p) => {
+    const o = p.overview
+    const basket = p.proxyBaskets[p.selectedProxyIndex]
+    md += `| ${o.ticker} | $${o.aum.toFixed(1)}B | ${o.premiumDiscount >= 0 ? "+" : ""}${o.premiumDiscount.toFixed(1)}% | ${o.distributionRate}% | ${basket?.correlation.toFixed(3)} | ${basket?.trackingError.toFixed(2)}% | ${p.confidence} |\n`
+  })
+
+  md += `
 ### Key Findings
 
-**1. Holdings Concentration**
-UTF holds ${concentrationMetrics.totalPositions} positions across ${sectorExposures.length} sectors. The top 10 positions represent ${concentrationMetrics.top10Weight}% of the portfolio. Utilities dominate at ${sectorExposures[0].weight}%, followed by Cell Towers (${sectorExposures[1].weight}%) and Midstream (${sectorExposures[2].weight}%).
+**1. Diversification Benefit**
+The ${syntheticFund.weightingRule} weighting across 10 distinct CEF strategies yields a diversification ratio of ${m.diversificationRatio.toFixed(2)}x, significantly reducing portfolio-level tracking error to ${m.portfolioTrackingError.toFixed(2)}% versus individual fund averages.
 
-**2. Factor Profile**
-The fund exhibits strong loadings on REIT/Infrastructure Beta (${factorExposures[1].exposure.toFixed(2)}), Dividend Yield (${factorExposures[0].exposure.toFixed(2)}), and Utilities sector exposure (${factorExposures[6].exposure.toFixed(2)}). Duration sensitivity is negative (${factorExposures[2].exposure.toFixed(2)}), indicating the fund benefits from rising rates, which is atypical for infrastructure.
+**2. Leverage Concentration**
+${profiles.filter((p) => p.leverageProbe.leverageDetected).length} of 10 funds show signs of undisclosed leverage or derivative overlays. The aggregate net beta of ${m.netBeta.toFixed(4)} indicates the hedge portfolio is approximately market-neutral.
 
-**3. Best Proxy**
-The "Minimum Tracking Error" basket achieves a 90-day correlation of ${proxyBaskets[2].correlation90d.toFixed(3)} with tracking error of ${proxyBaskets[2].trackingError.toFixed(2)}%. The 180-day stress correlation drops to ${correlationRegimes[2].stressCorr.toFixed(3)}, confirming regime stability. It uses a blend of IGF, XLU, AMT, AMLP, and EQIX.
+**3. Execution Considerations**
+Total estimated borrow cost is ${formatCurrency(m.totalBorrowCost)} annually. Slippage estimates total ${formatCurrency(m.totalSlippage)} for initial implementation. Execution should be staggered across 2-5 days per fund depending on liquidity.
 
-**4. Hedge Implementation**
-A $50M long UTF / short proxy position yields an expected annualized return of ${hedgeStats.annualizedReturn}% with max drawdown of ${hedgeStats.maxDrawdown}%. Basis risk (market-price) is ${hedgeStats.basisRiskMarket}%, driven primarily by CEF premium/discount volatility.
-
-**5. Leverage Alert**
-Analysis flags likely undisclosed leverage of approximately ${leverageProbe.leverageEstimate}x, with an unexplained return component of +${leverageProbe.unexplainedReturn}% annualized. This is consistent with structural leverage via borrowing facilities and potential derivative overlays.
-
-**6. Tiered Slippage**
-At $50M notional (the $25M-$50M band), estimated total slippage is 18 bps (8 bps bid-ask + 10 bps market impact). Execution recommendation: VWAP/TWAP algos over 2-3 trading days.
-
-### Hedge Talking Points
-- UTF offers strong infrastructure exposure but carries CEF-specific risks (premium/discount volatility, leverage, distribution sustainability)
-- The proxy hedge reduces infrastructure market risk while capturing the CEF alpha/premium
-- Key risk: distribution policy changes could cause a significant gap between UTF and the proxy
-- 180-day stress correlation of ${correlationRegimes[2].stressCorr.toFixed(3)} confirms proxy holds up under market stress
-- Replication confidence: **${confidenceScore}/100** (Moderate) - primary concern is disclosure lag and hidden derivatives
-
-### Replication Confidence: ${confidenceScore}/100
-${confidenceScore >= 80 ? "High" : confidenceScore >= 60 ? "Moderate" : "Low"} confidence in proxy replication accuracy.
+### Top 3 Risks
+1. **Distribution Policy Changes**: Multiple funds trade at premiums partly justified by distribution rates. Cuts would compress premiums and widen basis risk.
+2. **Disclosure Lag**: Holdings are reported quarterly with 30-60 day lag. Actual portfolios may diverge from the proxy baskets.
+3. **Cross-Fund Correlation Spike**: During market stress, residual correlations between hedge positions may increase, reducing diversification benefit.
 
 ---
-*Generated by UTF Analysis Dashboard | Data as of ${fundOverview.asOfDate}*
+*Generated by Multi-CEF Analysis Dashboard | Not investment advice*
 `
+  return md
 }
 
-export function ExportPanel() {
+// ─── Input Checklist ────────────────────────────────────────────────────────
+
+interface ChecklistItem {
+  item: string
+  source: string
+  status: "ready" | "pending"
+  perFund: boolean
+}
+
+const inputChecklist: ChecklistItem[] = [
+  { item: "Holdings CSVs (latest quarterly)", source: "Fund sponsor websites", status: "ready", perFund: true },
+  { item: "2-Year Daily NAV & Market Price", source: "CEF Connect / Yahoo Finance", status: "ready", perFund: true },
+  { item: "Distribution History", source: "Fund sponsors / Yahoo Finance", status: "ready", perFund: true },
+  { item: "Premium/Discount History (2yr)", source: "CEF Connect", status: "ready", perFund: true },
+  { item: "Target Notional ($500M total)", source: "User-defined", status: "ready", perFund: false },
+  { item: "Weighting Rule Selection", source: "User-defined", status: "ready", perFund: false },
+  { item: "ETF Universe (liquid, low-cost)", source: "ETF.com / Bloomberg", status: "ready", perFund: false },
+  { item: "Borrow Rate Estimates", source: "Prime broker / IBKR", status: "ready", perFund: false },
+]
+
+// ─── Component ──────────────────────────────────────────────────────────────
+
+interface Props {
+  profiles: CEFProfile[]
+  syntheticFund: SyntheticHedgeFund
+  selectedProfile: CEFProfile
+}
+
+export function ExportPanel({ profiles, syntheticFund, selectedProfile }: Props) {
   const [downloading, setDownloading] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -162,13 +201,13 @@ export function ExportPanel() {
     setTimeout(() => {
       switch (type) {
         case "csv":
-          downloadFile(generateCSV(), "utf-holdings-proxy.csv", "text/csv")
+          downloadFile(generateMultiCSV(profiles), "multi-cef-holdings-proxy.csv", "text/csv")
           break
         case "json":
-          downloadFile(generateJSON(), "utf-analysis.json", "application/json")
+          downloadFile(generateMultiJSON(profiles, syntheticFund), "multi-cef-analysis.json", "application/json")
           break
         case "md":
-          downloadFile(generateMarkdown(), "utf-advisor-explainer.md", "text/markdown")
+          downloadFile(generateMultiMarkdown(profiles, syntheticFund), "multi-cef-advisor-explainer.md", "text/markdown")
           break
       }
       setDownloading(null)
@@ -176,7 +215,7 @@ export function ExportPanel() {
   }
 
   const handleCopyPrompt = async () => {
-    await navigator.clipboard.writeText(herculesPrompt)
+    await navigator.clipboard.writeText(multiCefHerculesPrompt)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -187,25 +226,25 @@ export function ExportPanel() {
       <div className="grid gap-4 md:grid-cols-3">
         <ExportCard
           icon={<FileText className="h-5 w-5 text-success" />}
-          title="Holdings CSV"
-          description="Reconstructed UTF holdings with proxy weights and liquidity scores for all 20 top positions."
-          filename="utf-holdings-proxy.csv"
+          title="Multi-Fund Holdings CSV"
+          description="Top 10 holdings per fund across all 10 CEFs with proxy baskets, correlations, and confidence scores."
+          filename="multi-cef-holdings-proxy.csv"
           onDownload={() => handleDownload("csv")}
           isDownloading={downloading === "csv"}
         />
         <ExportCard
           icon={<FileJson className="h-5 w-5 text-primary" />}
-          title="Analysis JSON"
-          description="Factor exposures, correlation matrices (90d, 180d, stress), hedge stats, tiered slippage assumptions."
-          filename="utf-analysis.json"
+          title="Full Analysis JSON"
+          description="Per-fund exposures, correlations, hedge stats, leverage probes, and synthetic fund portfolio metrics."
+          filename="multi-cef-analysis.json"
           onDownload={() => handleDownload("json")}
           isDownloading={downloading === "json"}
         />
         <ExportCard
           icon={<File className="h-5 w-5 text-warning" />}
-          title="Advisor Explainer"
-          description="1-page narrative with hedge talking points, tiered slippage, and key findings."
-          filename="utf-advisor-explainer.md"
+          title="Advisor Explainer (MD)"
+          description="1-page multi-fund narrative with per-fund summary table, execution plan, and key risk callouts."
+          filename="multi-cef-advisor-explainer.md"
           onDownload={() => handleDownload("md")}
           isDownloading={downloading === "md"}
         />
@@ -214,11 +253,8 @@ export function ExportPanel() {
       {/* Input Checklist */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <ClipboardList className="h-4 w-4 text-primary" />
-            <CardTitle className="text-sm text-foreground">Input Checklist</CardTitle>
-          </div>
-          <CardDescription>Required data sources and their status for running the full analysis</CardDescription>
+          <CardTitle className="text-sm text-foreground">Input Checklist</CardTitle>
+          <CardDescription>Required data sources for the multi-fund pipeline ({profiles.length} funds)</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -227,22 +263,24 @@ export function ExportPanel() {
                 <TableHead className="text-muted-foreground text-xs w-8">Status</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Input Item</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Source</TableHead>
-                <TableHead className="text-muted-foreground text-xs">Action</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-center">Per Fund</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {inputChecklist.map((item) => (
                 <TableRow key={item.item} className="border-border">
                   <TableCell>
-                    {item.status === "ready" ? (
-                      <CheckCircle2 className="h-4 w-4 text-success" />
-                    ) : (
-                      <Circle className="h-4 w-4 text-muted-foreground" />
-                    )}
+                    <CheckCircle2 className="h-4 w-4 text-success" />
                   </TableCell>
                   <TableCell className="text-xs font-medium text-foreground">{item.item}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.source}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{item.action}</TableCell>
+                  <TableCell className="text-center">
+                    {item.perFund ? (
+                      <Badge variant="outline" className="text-[9px] border-primary/30 text-primary">x{profiles.length}</Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Global</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -256,7 +294,7 @@ export function ExportPanel() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Terminal className="h-4 w-4 text-primary" />
-              <CardTitle className="text-sm text-foreground">Hercules Prompt</CardTitle>
+              <CardTitle className="text-sm text-foreground">Multi-CEF Hercules Prompt</CardTitle>
               <Badge variant="outline" className="text-[10px] border-success/30 text-success">Ready to Paste</Badge>
             </div>
             <button
@@ -267,60 +305,80 @@ export function ExportPanel() {
               {copied ? "Copied" : "Copy Prompt"}
             </button>
           </div>
-          <CardDescription>Finalized UTF analysis prompt for Hercules engine -- paste directly or hand off to an engineer</CardDescription>
+          <CardDescription>Complete multi-fund analysis prompt covering all 10 CEFs plus synthetic fund aggregation</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-lg border border-border bg-secondary/30 p-4">
             <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground">
-              {herculesPrompt}
+              {multiCefHerculesPrompt}
             </pre>
           </div>
         </CardContent>
       </Card>
 
-      {/* Preview of the Markdown */}
+      {/* Quick Fund Comparison Preview */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Advisor Explainer Preview</CardTitle>
-          <CardDescription>1-page summary for client communication</CardDescription>
+          <CardTitle className="text-sm text-foreground">Advisor Summary Preview</CardTitle>
+          <CardDescription>Key metrics across all 10 funds at a glance</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-border bg-secondary/20 p-6 font-mono text-xs leading-relaxed text-muted-foreground">
-            <h3 className="mb-3 text-base font-sans font-semibold text-foreground">UTF Analysis Report</h3>
-            <p className="mb-4">
-              Cohen & Steers Infrastructure Fund (NYSE: UTF) is a closed-end fund managing ${(fundOverview.totalAssets / 1e9).toFixed(1)}B
-              in diversified infrastructure assets. Trading at a {Math.abs(fundOverview.premiumDiscount).toFixed(2)}% discount to NAV,
-              the fund offers a {fundOverview.distributionRate}% distribution rate with {fundOverview.leverage}% structural leverage.
-            </p>
-            <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-5">
-              <div>
-                <span className="text-[10px] uppercase text-muted-foreground">Best Proxy Corr</span>
-                <div className="text-sm font-semibold text-foreground">{proxyBaskets[2].correlation90d.toFixed(3)}</div>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-muted-foreground">Stress Corr</span>
-                <div className="text-sm font-semibold text-foreground">{correlationRegimes[2].stressCorr.toFixed(3)}</div>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-muted-foreground">Tracking Error</span>
-                <div className="text-sm font-semibold text-foreground">{proxyBaskets[2].trackingError.toFixed(2)}%</div>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-muted-foreground">Hedge Max DD</span>
-                <div className="text-sm font-semibold text-destructive">{hedgeStats.maxDrawdown.toFixed(1)}%</div>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase text-muted-foreground">Confidence</span>
-                <div className="text-sm font-semibold text-warning">{confidenceScore}/100</div>
-              </div>
-            </div>
-            <p className="mb-2 font-semibold text-foreground font-sans text-xs">Key Risks:</p>
-            <ul className="flex flex-col gap-1">
-              {invalidationRisks.slice(0, 3).map((r) => (
-                <li key={r.risk} className="text-muted-foreground">- {r.risk}: {r.impact}</li>
-              ))}
-            </ul>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground text-xs">Ticker</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">AUM</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">P/D</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Dist</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Lev</TableHead>
+                <TableHead className="text-muted-foreground text-xs">Best Proxy</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Corr</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">TE</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Conf</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Leverage Flag</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {profiles.map((p) => {
+                const o = p.overview
+                const basket = p.proxyBaskets[p.selectedProxyIndex]
+                return (
+                  <TableRow key={o.ticker} className="border-border">
+                    <TableCell className="font-mono text-xs font-bold text-primary">{o.ticker}</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-foreground">${o.aum.toFixed(1)}B</TableCell>
+                    <TableCell className="text-right">
+                      <span className={`font-mono text-xs ${o.premiumDiscount >= 0 ? "text-success" : "text-destructive"}`}>
+                        {o.premiumDiscount >= 0 ? "+" : ""}{o.premiumDiscount.toFixed(1)}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs text-foreground">{o.distributionRate}%</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-foreground">{o.leverageRatio > 0 ? `${o.leverageRatio}%` : "-"}</TableCell>
+                    <TableCell className="font-mono text-[10px] text-muted-foreground max-w-[140px] truncate">
+                      {basket?.tickers.slice(0, 3).join(", ")}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="outline" className={`font-mono text-[10px] ${basket?.correlation >= 0.96 ? "text-success border-success/30" : basket?.correlation >= 0.93 ? "text-primary border-primary/30" : "text-warning border-warning/30"}`}>
+                        {basket?.correlation.toFixed(3)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs text-foreground">{basket?.trackingError.toFixed(2)}%</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="outline" className={`font-mono text-[10px] ${p.confidence >= 75 ? "text-success border-success/30" : p.confidence >= 60 ? "text-warning border-warning/30" : "text-destructive border-destructive/30"}`}>
+                        {p.confidence}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {p.leverageProbe.leverageDetected ? (
+                        <Badge className="bg-destructive/20 text-destructive border-0 text-[10px]">Flagged</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Clean</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

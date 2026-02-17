@@ -2,28 +2,31 @@
 // Based on actual fund characteristics and Q4 2025 disclosure patterns
 
 export interface Holding {
-  rank: number
-  issuer: string
+  name?: string
+  issuer?: string
   ticker: string
   sector: string
   weight: number
   marketValue: number
-  liquidityScore: number
   country: string
+  rank?: number
+  liquidityScore?: number
 }
 
 export interface SectorExposure {
   sector: string
   weight: number
-  marketValue: number
-  holdingCount: number
+  color?: string
+  marketValue?: number
+  holdingCount?: number
 }
 
 export interface FactorExposure {
   factor: string
   exposure: number
   tStat: number
-  contribution: number
+  contribution?: number
+  significance?: string
 }
 
 export interface ProxyETF {
@@ -36,13 +39,19 @@ export interface ProxyETF {
 }
 
 export interface ProxyBasket {
-  id: number
   name: string
-  correlation90d: number
-  correlation180d: number
+  tickers: string[]
+  weights: number[]
+  correlation: number
   trackingError: number
-  expectedTurnover: number
-  etfs: ProxyETF[]
+  annualizedCost: number
+  rationale: string
+  // Legacy fields (optional for backwards compat)
+  id?: number
+  correlation90d?: number
+  correlation180d?: number
+  expectedTurnover?: number
+  etfs?: ProxyETF[]
 }
 
 export interface HedgeStats {
@@ -87,6 +96,46 @@ export interface DailyPnLData {
   date: string
   pnl: number
   cumPnl: number
+}
+
+// Types used by cef-universe multi-fund system
+export interface HedgeSimulation {
+  notional: number
+  hedgeRatio: number
+  dailyPnl: { day: number; pnl: number; cumulative: number }[]
+  maxDrawdown: number
+  realizedTrackingError: number
+  sharpeRatio: number
+  basisRisk: number
+  annualizedReturn?: number
+  scenarios: {
+    scenario: string
+    pnlImpact: number
+    probability: string
+    description: string
+  }[]
+}
+
+export interface CostComponent {
+  component: string
+  bps: number
+  dollarCost: number
+  notes: string
+}
+
+export interface LeverageProbe {
+  leverageDetected: boolean
+  estimatedLeverage: number
+  instruments: {
+    type: string
+    notional: number
+    description: string
+  }[]
+  unexplainedReturn: number
+  confidenceInDetection: number
+  notes: string
+  flagged?: boolean
+  leverageEstimate?: number
 }
 
 // Top 20 Holdings - based on actual UTF holdings patterns
@@ -468,4 +517,8 @@ export function formatCurrency(value: number): string {
 
 export function formatPercent(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`
+}
+
+export function formatBps(value: number): string {
+  return `${value.toFixed(0)} bps`
 }
