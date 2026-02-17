@@ -180,12 +180,106 @@ function normalizeDistType(raw: string): DistributionRow["type"] {
   return map[lower] ?? "income"
 }
 
+// ─── Barchart CSV Auto-Detection & Normalization ────────────────────────────
+// Ported from barchart_to_universe.py: detects raw Barchart watchlist exports
+// (columns: Symbol,Name,Last,Change,%Change,Open,High,Low,Volume,Time) and
+// normalizes them to the canonical universe_cef_metrics.csv schema before parsing.
+// Barchart CSV only provides Ticker (from Symbol) and ADV proxy (from Volume);
+// all other metrics are left as 0/empty for enrichment merge later.
+
+const BARCHART_SIGNATURE = ["symbol", "name", "last", "change"]
+
+/**
+ * Detect whether a CSV is a raw Barchart export by checking the first 4 columns.
+ * Returns true if the header matches the Barchart signature.
+ */
+export function isBarchartFormat(csv: string): boolean {
+  const firstLine = csv.trim().split("\n")[0] ?? ""
+  const delimiter = detectDelimiter(firstLine)
+  const headers = firstLine.split(delimiter).map(h =>
+    h.trim().replace(/^["']|["']$/g, "").toLowerCase().replace(/[^a-z0-9]/g, "")
+  )
+  return BARCHART_SIGNATURE.every(sig => headers.includes(sig))
+}
+
+/**
+ * Convert a Barchart CSV to canonical universe_cef_metrics.csv format.
+ * Extracts Ticker from Symbol and uses Volume as ADV proxy.
+ * All enrichment fields (AUM, returns, P/D, yield, vol, UNII, coverage) default to 0.
+ * The caller can merge enrichment data afterward.
+ */
+export function normalizeBarchartToUniverse(barchartCsv: string): string {
+  const { headers, rows, delimiter } = splitCsvLines(barchartCsv)
+  const lowerHeaders = headers.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ""))
+
+  const symbolIdx = lowerHeaders.indexOf("symbol")
+  const volumeIdx = lowerHeaders.indexOf("volume")
+
+  if (symbolIdx === -1) {
+    return "Ticker,AUM,ADV,1y_return,90d_return,avg_premium_discount,yield,realized_vol,holdings_date,UNII,distribution_coverage\n"
+  }
+
+  const canonicalHeader = "Ticker,AUM,ADV,1y_return,90d_return,avg_premium_discount,yield,realized_vol,holdings_date,UNII,distribution_coverage"
+  const today = new Date().toISOString().slice(0, 10)
+  const lines = [canonicalHeader]
+
+  for (const row of rows) {
+    const ticker = str(row[symbolIdx]).toUpperCase()
+    if (!ticker) continue
+    // Volume from Barchart as ADV proxy (strip commas)
+    const adv = volumeIdx !== -1 ? num(row[volumeIdx]) : 0
+    // All enrichment fields default to 0 / today
+    lines.push(`${ticker},0,${adv},0,0,0,0,0,${today},0,1`)
+  }
+
+  return lines.join("\n")
+}
+
+/**
+ * Merge enrichment data into a pre-parsed universe metrics array.
+ * Each enrichment file is a 2-column CSV: Ticker,<value>.
+ * Matches by ticker and fills in the specified field.
+ */
+export function mergeEnrichment(
+  base: UniverseMetricsRow[],
+  enrichmentCsv: string,
+  targetField: keyof Omit<UniverseMetricsRow, "ticker" | "holdingsDate">,
+): UniverseMetricsRow[] {
+  const { headers, rows } = splitCsvLines(enrichmentCsv)
+  const lowerHeaders = headers.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ""))
+  const tickerIdx = lowerHeaders.findIndex(h => h === "ticker" || h === "symbol")
+  const valIdx = lowerHeaders.findIndex((_, i) => i !== tickerIdx)
+
+  if (tickerIdx === -1 || valIdx === -1) return base
+
+  const lookup = new Map<string, number>()
+  for (const row of rows) {
+    const ticker = str(row[tickerIdx]).toUpperCase()
+    if (ticker) lookup.set(ticker, num(row[valIdx]))
+  }
+
+  return base.map(r => {
+    const val = lookup.get(r.ticker)
+    if (val !== undefined) {
+      return { ...r, [targetField]: val }
+    }
+    return r
+  })
+}
+
 // ─── Schema Parsers ─────────────────────────────────────────────────────────
 
+/**
+ * Parse universe metrics CSV. Auto-detects Barchart format and normalizes first.
+ */
 export function parseUniverseMetrics(csv: string): ParseResult<UniverseMetricsRow> {
+  // Auto-detect Barchart format and normalize
+  const normalizedCsv = isBarchartFormat(csv) ? normalizeBarchartToUniverse(csv) : csv
   const errors: ParseError[] = []
   const data: UniverseMetricsRow[] = []
-  const { headers, rows } = splitCsvLines(csv)
+  const { headers, rows } = splitCsvLines(normalizedCsv)
+  const wasBarchart = isBarchartFormat(csv)
+  if (wasBarchart) errors.push({ row: 0, column: "format", message: "Auto-detected Barchart format; normalized to canonical schema. Enrichment fields default to 0." })
   const col = resolveColumns(headers, UNIVERSE_COLUMNS)
 
   // Warn about unresolved columns

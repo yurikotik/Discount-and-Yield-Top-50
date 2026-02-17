@@ -209,7 +209,7 @@ export function WorkflowView() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {/* Ingest Output */}
-            <OutputPanel title={`1. Ingest: ${pipeline.ingest.outputs.holdingsNormalized.length} holdings, ${pipeline.ingest.outputs.dailyReturns.length} daily returns, ${pipeline.ingest.outputs.universeMetrics.length} universe funds`}>
+            <OutputPanel title={`1. Ingest: ${pipeline.ingest.outputs.holdingsNormalized.length} holdings, ${pipeline.ingest.outputs.dailyReturns.length} daily returns, ${pipeline.ingest.outputs.universeMetrics.length} universe funds${pipeline.ingest.meta.errors.some(e => e.column === "format") ? " (Barchart auto-detected)" : ""}`}>
               <div className="flex flex-col gap-3">
                 <div>
                   <p className="text-xs font-medium text-foreground mb-2">Universe Metrics ({pipeline.ingest.outputs.universeMetrics.length} funds)</p>
