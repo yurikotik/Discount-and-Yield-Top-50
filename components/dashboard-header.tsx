@@ -1,7 +1,6 @@
 "use client"
 
 import type { CEFProfile } from "@/lib/cef-universe"
-import { Badge } from "@/components/ui/badge"
 import { TrendingDown, TrendingUp, Activity } from "lucide-react"
 
 interface Props {
@@ -13,12 +12,12 @@ interface Props {
 const viewLabels: Record<string, string> = {
   overview: "Portfolio Overview",
   "fund-detail": "Fund Detail",
-  synthetic: "Synthetic Hedge Fund",
-  export: "Export & Prompt",
+  comparison: "Fund Comparison",
 }
 
 export function DashboardHeader({ profile, fundCount, viewMode }: Props) {
   const o = profile.overview
+  const totalAum = "$22.5B"
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-card px-6 py-4">
@@ -28,10 +27,10 @@ export function DashboardHeader({ profile, fundCount, viewMode }: Props) {
         </div>
         <div>
           <h1 className="text-lg font-bold text-foreground">
-            Multi-CEF Analysis Platform
+            Top 10 CEF Dashboard
           </h1>
           <p className="text-xs text-muted-foreground">
-            {fundCount} closed-end funds | $500M synthetic notional | {viewLabels[viewMode] ?? ""}
+            {fundCount} closed-end funds | {totalAum} combined AUM | {viewLabels[viewMode] ?? ""}
           </p>
         </div>
       </div>
@@ -42,9 +41,7 @@ export function DashboardHeader({ profile, fundCount, viewMode }: Props) {
             <div className="flex flex-col items-end gap-0.5">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-base font-bold text-primary">{o.ticker}</span>
-                <Badge variant="outline" className={`text-[10px] ${profile.confidence >= 75 ? "border-success/30 text-success" : profile.confidence >= 60 ? "border-warning/30 text-warning" : "border-destructive/30 text-destructive"}`}>
-                  Conf: {profile.confidence}
-                </Badge>
+                <span className="text-xs text-muted-foreground">{o.category}</span>
               </div>
               <span className="max-w-[260px] truncate text-[10px] text-muted-foreground">{o.name}</span>
             </div>

@@ -6,41 +6,32 @@ import { CefSelector } from "@/components/cef-selector"
 import { PortfolioOverview } from "@/components/portfolio-overview"
 import { HoldingsSection } from "@/components/holdings-section"
 import { FactorsSection } from "@/components/factors-section"
-import { ProxySection } from "@/components/proxy-section"
-import { HedgeSection } from "@/components/hedge-section"
-import { CostsSection } from "@/components/costs-section"
-import { LeverageSection } from "@/components/leverage-section"
-import { SyntheticFundSection } from "@/components/synthetic-fund-section"
-import { ExportPanel } from "@/components/export-panel"
+import { IncomeSection } from "@/components/income-section"
+import { RiskSection } from "@/components/risk-section"
+import { FundComparison } from "@/components/fund-comparison"
 import {
-  allCEFProfiles,
-  buildSyntheticFund,
+  cefUniverse,
+  fundRankings,
   type CEFProfile,
-  type WeightingRule,
 } from "@/lib/cef-universe"
 import {
   BarChart3,
   PieChart,
-  Repeat2,
-  Shield,
   DollarSign,
   AlertTriangle,
-  Download,
   LayoutDashboard,
-  Layers,
+  GitCompare,
 } from "lucide-react"
 
 // ─── View Modes ─────────────────────────────────────────────────────────────
 
-type ViewMode = "overview" | "fund-detail" | "synthetic" | "export"
+type ViewMode = "overview" | "fund-detail" | "comparison"
 
 const fundDetailTabs = [
   { id: "holdings", label: "Holdings", icon: PieChart },
   { id: "factors", label: "Factors", icon: BarChart3 },
-  { id: "proxy", label: "Proxy", icon: Repeat2 },
-  { id: "hedge", label: "Hedge Sim", icon: Shield },
-  { id: "costs", label: "Costs", icon: DollarSign },
-  { id: "leverage", label: "Leverage & Risk", icon: AlertTriangle },
+  { id: "income", label: "Income", icon: DollarSign },
+  { id: "risk", label: "Risk", icon: AlertTriangle },
 ] as const
 
 type FundDetailTab = (typeof fundDetailTabs)[number]["id"]
@@ -49,20 +40,10 @@ export default function Page() {
   const [viewMode, setViewMode] = useState<ViewMode>("overview")
   const [selectedTicker, setSelectedTicker] = useState("UTF")
   const [activeDetailTab, setActiveDetailTab] = useState<FundDetailTab>("holdings")
-  const [weightingRule, setWeightingRule] = useState<WeightingRule>("risk-parity")
-  const [selectedBasketIndex, setSelectedBasketIndex] = useState(0)
-  const [analyzedTickers] = useState<Set<string>>(
-    () => new Set(allCEFProfiles.map((p) => p.overview.ticker))
-  )
 
   const selectedProfile: CEFProfile = useMemo(
-    () => allCEFProfiles.find((p) => p.overview.ticker === selectedTicker) ?? allCEFProfiles[0],
+    () => cefUniverse.find((p) => p.overview.ticker === selectedTicker) ?? cefUniverse[0],
     [selectedTicker]
-  )
-
-  const syntheticFund = useMemo(
-    () => buildSyntheticFund(allCEFProfiles, weightingRule),
-    [weightingRule]
   )
 
   const handleNavigateToFund = useCallback((ticker: string) => {
@@ -73,9 +54,7 @@ export default function Page() {
 
   const handleSelectFundFromBar = useCallback((ticker: string) => {
     setSelectedTicker(ticker)
-    if (viewMode === "fund-detail") {
-      // stay in fund-detail, just switch ticker
-    } else {
+    if (viewMode !== "fund-detail") {
       setViewMode("fund-detail")
     }
   }, [viewMode])
@@ -83,22 +62,20 @@ export default function Page() {
   const topNavItems = [
     { id: "overview" as ViewMode, label: "Portfolio Overview", icon: LayoutDashboard },
     { id: "fund-detail" as ViewMode, label: `Fund Detail (${selectedTicker})`, icon: PieChart },
-    { id: "synthetic" as ViewMode, label: "Synthetic Fund", icon: Layers },
-    { id: "export" as ViewMode, label: "Export & Prompt", icon: Download },
+    { id: "comparison" as ViewMode, label: "Fund Comparison", icon: GitCompare },
   ]
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Global Header */}
-      <DashboardHeader profile={selectedProfile} fundCount={allCEFProfiles.length} viewMode={viewMode} />
+      <DashboardHeader profile={selectedProfile} fundCount={cefUniverse.length} viewMode={viewMode} />
 
       {/* CEF Selector Bar */}
       <div className="border-b border-border px-6 py-3 bg-secondary/20">
         <CefSelector
-          funds={allCEFProfiles}
+          funds={cefUniverse}
           selectedTicker={selectedTicker}
           onSelect={handleSelectFundFromBar}
-          analyzedTickers={analyzedTickers}
         />
       </div>
 
@@ -159,7 +136,8 @@ export default function Page() {
         {/* Portfolio Overview */}
         {viewMode === "overview" && (
           <PortfolioOverview
-            funds={allCEFProfiles}
+            funds={cefUniverse}
+            rankings={fundRankings}
             selectedTicker={selectedTicker}
             onSelectFund={setSelectedTicker}
             onNavigateToFund={handleNavigateToFund}
@@ -171,29 +149,17 @@ export default function Page() {
           <>
             {activeDetailTab === "holdings" && <HoldingsSection data={selectedProfile} />}
             {activeDetailTab === "factors" && <FactorsSection data={selectedProfile} />}
-            {activeDetailTab === "proxy" && <ProxySection data={selectedProfile} selectedBasket={selectedBasketIndex} onSelectBasket={setSelectedBasketIndex} />}
-            {activeDetailTab === "hedge" && <HedgeSection data={selectedProfile} />}
-            {activeDetailTab === "costs" && <CostsSection data={selectedProfile} />}
-            {activeDetailTab === "leverage" && <LeverageSection data={selectedProfile} />}
+            {activeDetailTab === "income" && <IncomeSection data={selectedProfile} />}
+            {activeDetailTab === "risk" && <RiskSection data={selectedProfile} />}
           </>
         )}
 
-        {/* Synthetic Fund Aggregation */}
-        {viewMode === "synthetic" && (
-          <SyntheticFundSection
-            fund={syntheticFund}
-            weightingRule={weightingRule}
-            onChangeRule={setWeightingRule}
-            profiles={allCEFProfiles}
-          />
-        )}
-
-        {/* Export & Prompt */}
-        {viewMode === "export" && (
-          <ExportPanel
-            profiles={allCEFProfiles}
-            syntheticFund={syntheticFund}
-            selectedProfile={selectedProfile}
+        {/* Fund Comparison */}
+        {viewMode === "comparison" && (
+          <FundComparison
+            funds={cefUniverse}
+            rankings={fundRankings}
+            onNavigateToFund={handleNavigateToFund}
           />
         )}
       </main>
@@ -201,7 +167,7 @@ export default function Page() {
       {/* Footer */}
       <footer className="border-t border-border px-6 py-3">
         <p className="text-center text-xs text-muted-foreground">
-          Multi-CEF Analysis Dashboard | 10 Funds | {syntheticFund.weightingRule.replace("-", " ")} weighting | $500M total notional | Not investment advice
+          Top 10 CEF Analytics Dashboard | {cefUniverse.length} Funds | Z-Score + PSI Ranking | Not investment advice
         </p>
       </footer>
     </div>
