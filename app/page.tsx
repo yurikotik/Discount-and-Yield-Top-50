@@ -46,6 +46,11 @@ export default function Page() {
     [selectedTicker]
   )
 
+  const totalAum = useMemo(
+    () => cefUniverse.reduce((s, f) => s + f.overview.aum, 0),
+    []
+  )
+
   const handleNavigateToFund = useCallback((ticker: string) => {
     setSelectedTicker(ticker)
     setActiveDetailTab("holdings")
@@ -68,7 +73,7 @@ export default function Page() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Global Header */}
-      <DashboardHeader profile={selectedProfile} fundCount={cefUniverse.length} viewMode={viewMode} />
+      <DashboardHeader profile={selectedProfile} fundCount={cefUniverse.length} totalAum={totalAum} viewMode={viewMode} />
 
       {/* CEF Selector Bar */}
       <div className="border-b border-border px-6 py-3 bg-secondary/20">

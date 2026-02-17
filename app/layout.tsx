@@ -7,8 +7,8 @@ const _inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const _jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" });
 
 export const metadata: Metadata = {
-  title: 'Multi-CEF Analysis Platform | 10 Closed-End Fund Hedge Dashboard',
-  description: 'Institutional-grade analysis platform for 10 closed-end funds (UTF, PDI, RQI, PTY, GOF, EOS, STK, USA, UTG, DNP). Holdings decomposition, factor attribution, proxy construction, hedge simulation, synthetic fund aggregation, and $500M execution planning.',
+  title: 'Top 10 CEF Analytics Dashboard | Z-Score + PSI Ranking',
+  description: 'Institutional-grade analytics dashboard for 10 closed-end funds (UTF, PDI, RQI, PTY, GOF, EOS, STK, USA, UTG, DNP). Z-score/PSI ranking, holdings decomposition, factor attribution, income analysis, risk metrics, and cross-fund comparison.',
   generator: 'v0.app',
   icons: {
     icon: [

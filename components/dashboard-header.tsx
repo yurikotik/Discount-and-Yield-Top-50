@@ -6,6 +6,7 @@ import { TrendingDown, TrendingUp, Activity } from "lucide-react"
 interface Props {
   profile: CEFProfile
   fundCount: number
+  totalAum: number
   viewMode: string
 }
 
@@ -15,9 +16,8 @@ const viewLabels: Record<string, string> = {
   comparison: "Fund Comparison",
 }
 
-export function DashboardHeader({ profile, fundCount, viewMode }: Props) {
+export function DashboardHeader({ profile, fundCount, totalAum, viewMode }: Props) {
   const o = profile.overview
-  const totalAum = "$22.5B"
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-card px-6 py-4">
@@ -30,7 +30,7 @@ export function DashboardHeader({ profile, fundCount, viewMode }: Props) {
             Top 10 CEF Dashboard
           </h1>
           <p className="text-xs text-muted-foreground">
-            {fundCount} closed-end funds | {totalAum} combined AUM | {viewLabels[viewMode] ?? ""}
+            {fundCount} closed-end funds | ${totalAum.toFixed(1)}B combined AUM | {viewLabels[viewMode] ?? ""}
           </p>
         </div>
       </div>
