@@ -1,5 +1,15 @@
 // ─── 40 Additional CEF Profiles from Barchart CSV (2026-02-13) ──────────────
 // Real: ticker, name, last price, volume. Generated: strategy/category, holdings, factors.
+//
+// Canonical CSV schema (9 columns):
+//   Ticker,AUM,ADV,1y_return,90d_return,avg_premium_discount,yield,realized_vol,holdings_date
+//
+// CSV -> FundSeed mapping (raw units -> display units):
+//   AUM:     CSV in dollars -> aum in $B (divide by 1e9)
+//   ADV:     CSV in shares  -> passed as raw to bc(), converted to $M internally
+//   1y_return, 90d_return, avg_premium_discount, yield, realized_vol:
+//            CSV as decimal (e.g. 0.08 = 8%) -> display as % (ret1y: 8.0, vol1y: 18.0, etc.)
+//   holdings_date: ISO date string (YYYY-MM-DD), passed directly
 
 import type { CEFOverview, PerformanceMetrics, RiskMetrics } from "./cef-universe"
 
@@ -137,14 +147,16 @@ function bc(
 
 export const barchartSeeds: BarchartFundSeed[] = [
   // Global / Multi-Asset
-  bc("BOE", "Blackrock Global", 11.95, 145000, "multi-asset", { aum: 0.8, dist: 6.8, lev: 22, pd: -6.2, ret1y: 8.4, ret90d: 1.8, vol1y: 12.8, unii: 0.08, distCov: 0.95, strategy: "Global multi-asset income with leverage", sectorWeights: globalSectors }),
+  // CSV: BOE,1200000000,145000,0.08,0.02,-0.05,0.065,0.18,2025-12-31
+  bc("BOE", "Blackrock Enhanced Global Dividend Trust", 11.95, 145000, "multi-asset", { aum: 1.2, dist: 6.5, lev: 22, pd: -5.0, ret1y: 8.0, ret90d: 2.0, vol1y: 18.0, unii: 0.08, distCov: 0.95, strategy: "Global multi-asset income with leverage", sectorWeights: globalSectors }),
   bc("EOD", "Wells Fargo Global Dividend Opportunity", 6.08, 123300, "multi-asset", { aum: 0.5, dist: 8.2, lev: 15, pd: -8.5, ret1y: 7.2, ret90d: 1.5, vol1y: 13.4, unii: -0.05, distCov: 0.88, strategy: "Global dividend equity and fixed income" }),
   bc("CHW", "Calamos Gbl Dyn Inc", 8.11, 80600, "multi-asset", { aum: 0.6, dist: 9.4, lev: 26, pd: -7.2, ret1y: 9.1, ret90d: 2.0, vol1y: 15.2, unii: -0.12, distCov: 0.82, strategy: "Global dynamic income with convertible focus", sectorWeights: convertibleSectors }),
   bc("BWG", "Legg Mason Bw Global Income", 8.61, 120400, "fixed-income", { aum: 0.7, dist: 8.8, lev: 24, pd: -9.4, ret1y: 6.8, ret90d: 1.2, vol1y: 11.8, unii: -0.08, distCov: 0.90, strategy: "Global fixed income with EM allocation" }),
   bc("ETW", "Eaton Vance Corp", 9.43, 418900, "multi-asset", { aum: 2.2, dist: 8.5, lev: 0, pd: -5.8, ret1y: 12.4, ret90d: 3.2, vol1y: 13.6, unii: 0.12, distCov: 1.05, strategy: "Global equity income with options overlay" }),
 
   // Equity / Covered Call
-  bc("PEO", "Adams Natural Resources Fund Inc", 25.61, 54900, "equity", { aum: 0.9, dist: 4.2, lev: 0, pd: -12.8, ret1y: 14.6, ret90d: 4.5, vol1y: 18.2, unii: 0.22, distCov: 1.35, strategy: "Natural resources equity long-only", sectorWeights: resourcesSectors, factorList: equityFactors }),
+  // CSV: PEO,900000000,54900,0.06,0.01,-0.03,0.058,0.17,2025-12-31
+  bc("PEO", "Adams Natural Resources Fund Inc", 25.61, 54900, "equity", { aum: 0.9, dist: 5.8, lev: 0, pd: -3.0, ret1y: 6.0, ret90d: 1.0, vol1y: 17.0, unii: 0.22, distCov: 1.35, strategy: "Natural resources equity long-only", sectorWeights: resourcesSectors, factorList: equityFactors }),
   bc("GDV", "Gabelli Dividend", 29.08, 79000, "equity", { aum: 2.8, dist: 5.8, lev: 0, pd: -8.4, ret1y: 15.2, ret90d: 3.8, vol1y: 14.6, unii: 0.18, distCov: 1.18, strategy: "Diversified equity with dividend focus" }),
   bc("GAM", "General American Investors", 60.99, 58800, "equity", { aum: 1.4, dist: 1.8, lev: 0, pd: -14.2, ret1y: 18.8, ret90d: 5.2, vol1y: 15.4, unii: 0.55, distCov: 1.82, strategy: "Concentrated large-cap equity" }),
   bc("TY", "Tri Continental Corp", 33.17, 33100, "equity", { aum: 1.6, dist: 3.2, lev: 0, pd: -12.6, ret1y: 16.4, ret90d: 4.1, vol1y: 14.8, unii: 0.38, distCov: 1.45, strategy: "Diversified large-cap equity with balanced approach" }),
