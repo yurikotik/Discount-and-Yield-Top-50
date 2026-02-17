@@ -13,6 +13,7 @@ import { DriftRegimeSection } from "@/components/drift-regime-section"
 import { LiquiditySection } from "@/components/liquidity-section"
 import { ConfidenceSection } from "@/components/confidence-section"
 import { FundComparison } from "@/components/fund-comparison"
+import { WorkflowView } from "@/components/workflow-view"
 import {
   cefUniverse,
   fundRankings,
@@ -29,11 +30,12 @@ import {
   Activity,
   Droplets,
   ShieldCheck,
+  Workflow,
 } from "lucide-react"
 
 // ─── View Modes ─────────────────────────────────────────────────────────────
 
-type ViewMode = "overview" | "fund-detail" | "comparison"
+type ViewMode = "overview" | "fund-detail" | "comparison" | "workflow"
 
 const fundDetailTabs = [
   { id: "holdings", label: "1. Holdings", icon: PieChart },
@@ -80,6 +82,7 @@ export default function Page() {
     { id: "overview" as ViewMode, label: "Portfolio Overview", icon: LayoutDashboard },
     { id: "fund-detail" as ViewMode, label: `Fund Detail (${selectedTicker})`, icon: PieChart },
     { id: "comparison" as ViewMode, label: "Fund Comparison", icon: GitCompare },
+    { id: "workflow" as ViewMode, label: "Workflow Pipeline", icon: Workflow },
   ]
 
   return (
@@ -182,6 +185,11 @@ export default function Page() {
             rankings={fundRankings}
             onNavigateToFund={handleNavigateToFund}
           />
+        )}
+
+        {/* Workflow Pipeline */}
+        {viewMode === "workflow" && (
+          <WorkflowView />
         )}
       </main>
 
