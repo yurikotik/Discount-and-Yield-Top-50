@@ -1,6 +1,7 @@
 "use client"
 
-import { holdings, sectorExposures, concentrationMetrics, formatCurrency } from "@/lib/utf-data"
+import type { CEFProfile } from "@/lib/cef-universe"
+import { formatCurrency } from "@/lib/cef-universe"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -17,25 +18,33 @@ import {
   Tooltip as RechartsTooltip,
 } from "recharts"
 
+interface Props {
+  data: CEFProfile
+}
+
 const SECTOR_COLORS = [
   "#4a9eff", "#34d399", "#fbbf24", "#f87171", "#a78bfa",
   "#60a5fa", "#fb923c", "#e879f9", "#22d3ee", "#94a3b8",
 ]
 
-function LiquidityBadge({ score }: { score: number }) {
-  if (score >= 90) return <Badge className="bg-success/20 text-success border-0 text-[10px]">High</Badge>
-  if (score >= 75) return <Badge className="bg-warning/20 text-warning border-0 text-[10px]">Med</Badge>
-  return <Badge className="bg-destructive/20 text-destructive border-0 text-[10px]">Low</Badge>
-}
+export function HoldingsSection({ data }: Props) {
+  const { holdings, sectors, overview } = data
 
-export function HoldingsSection() {
-  const pieData = sectorExposures.map((s, i) => ({
+  // Compute concentration metrics from holdings
+  const sorted = [...holdings].sort((a, b) => b.weight - a.weight)
+  const top5 = sorted.slice(0, 5).reduce((s, h) => s + h.weight, 0)
+  const top10 = sorted.slice(0, 10).reduce((s, h) => s + h.weight, 0)
+  const top20 = sorted.slice(0, 20).reduce((s, h) => s + h.weight, 0)
+  const hhi = sorted.reduce((s, h) => s + (h.weight / 100) ** 2, 0)
+  const effPositions = 1 / Math.max(hhi, 0.001)
+
+  const pieData = sectors.map((s, i) => ({
     name: s.sector,
     value: s.weight,
-    fill: SECTOR_COLORS[i % SECTOR_COLORS.length],
+    fill: s.color || SECTOR_COLORS[i % SECTOR_COLORS.length],
   }))
 
-  const barData = holdings.slice(0, 15).map((h) => ({
+  const barData = sorted.slice(0, 15).map((h) => ({
     name: h.ticker,
     weight: h.weight,
   }))
@@ -43,15 +52,14 @@ export function HoldingsSection() {
   return (
     <div className="flex flex-col gap-6">
       {/* Concentration Metrics */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-8">
-        <ConcentrationCard label="Top 5 Wt." value={`${concentrationMetrics.top5Weight}%`} />
-        <ConcentrationCard label="Top 10 Wt." value={`${concentrationMetrics.top10Weight}%`} />
-        <ConcentrationCard label="Top 20 Wt." value={`${concentrationMetrics.top20Weight}%`} />
-        <ConcentrationCard label="HHI" value={concentrationMetrics.herfindahlIndex.toFixed(3)} />
-        <ConcentrationCard label="Eff. Positions" value={concentrationMetrics.effectivePositions.toFixed(0)} />
-        <ConcentrationCard label="Total Positions" value={concentrationMetrics.totalPositions.toString()} />
-        <ConcentrationCard label="Avg Liquidity" value={concentrationMetrics.avgLiquidityScore.toFixed(0)} />
-        <ConcentrationCard label="Med. Liquidity" value={concentrationMetrics.medianLiquidityScore.toString()} />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-7">
+        <ConcentrationCard label="Top 5 Wt." value={`${top5.toFixed(1)}%`} />
+        <ConcentrationCard label="Top 10 Wt." value={`${top10.toFixed(1)}%`} />
+        <ConcentrationCard label="Top 20 Wt." value={`${top20.toFixed(1)}%`} />
+        <ConcentrationCard label="HHI" value={hhi.toFixed(3)} />
+        <ConcentrationCard label="Eff. Positions" value={effPositions.toFixed(0)} />
+        <ConcentrationCard label="Total Positions" value={holdings.length.toString()} />
+        <ConcentrationCard label="AUM" value={`$${overview.aum.toFixed(1)}B`} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -92,11 +100,11 @@ export function HoldingsSection() {
               </ResponsiveContainer>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
-              {sectorExposures.slice(0, 6).map((s, i) => (
+              {sectors.slice(0, 6).map((s, i) => (
                 <div key={s.sector} className="flex items-center gap-2 text-xs">
                   <div
                     className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: SECTOR_COLORS[i] }}
+                    style={{ backgroundColor: s.color || SECTOR_COLORS[i] }}
                   />
                   <span className="text-muted-foreground truncate">{s.sector}</span>
                   <span className="ml-auto font-mono text-foreground">{s.weight}%</span>
@@ -115,8 +123,8 @@ export function HoldingsSection() {
             <div className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <XAxis type="number" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 8]} tickFormatter={(v) => `${v}%`} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} width={55} />
+                  <XAxis type="number" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, "auto"]} tickFormatter={(v) => `${v}%`} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} width={65} />
                   <RechartsTooltip
                     contentStyle={{
                       backgroundColor: "oklch(0.16 0.018 250)",
@@ -142,8 +150,8 @@ export function HoldingsSection() {
       {/* Holdings Table */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Top 20 Holdings Detail</CardTitle>
-          <CardDescription>USD-weighted positions with liquidity scores</CardDescription>
+          <CardTitle className="text-sm text-foreground">Holdings Detail</CardTitle>
+          <CardDescription>USD-weighted positions for {overview.ticker}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -155,15 +163,14 @@ export function HoldingsSection() {
                 <TableHead className="text-muted-foreground text-xs">Sector</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">Weight</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">Mkt Value</TableHead>
-                <TableHead className="text-muted-foreground text-xs text-center">Liquidity</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Country</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {holdings.map((h) => (
-                <TableRow key={h.rank} className="border-border">
-                  <TableCell className="font-mono text-xs text-muted-foreground">{h.rank}</TableCell>
-                  <TableCell className="text-xs font-medium text-foreground">{h.issuer}</TableCell>
+              {sorted.map((h, i) => (
+                <TableRow key={`${h.ticker}-${i}`} className="border-border">
+                  <TableCell className="font-mono text-xs text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="text-xs font-medium text-foreground">{h.name}</TableCell>
                   <TableCell className="font-mono text-xs text-primary">{h.ticker}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{h.sector}</TableCell>
                   <TableCell className="text-right">
@@ -173,9 +180,6 @@ export function HoldingsSection() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs text-foreground">{formatCurrency(h.marketValue)}</TableCell>
-                  <TableCell className="text-center">
-                    <LiquidityBadge score={h.liquidityScore} />
-                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{h.country}</TableCell>
                 </TableRow>
               ))}

@@ -1,6 +1,6 @@
 "use client"
 
-import { factorExposures, navPriceData, returnDecomposition } from "@/lib/utf-data"
+import type { CEFProfile } from "@/lib/cef-universe"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -20,19 +20,30 @@ import {
   AreaChart,
 } from "recharts"
 
-export function FactorsSection() {
-  const factorBarData = factorExposures.map((f) => ({
+interface Props {
+  data: CEFProfile
+}
+
+export function FactorsSection({ data }: Props) {
+  const { factors, returnDecomposition, navHistory, overview } = data
+
+  const factorBarData = factors.map((f) => ({
     name: f.factor,
     exposure: f.exposure,
-    contribution: f.contribution,
   }))
 
   const decompositionBarData = returnDecomposition.map((r) => ({
     period: r.period,
-    "NAV Return": r.navReturn,
-    "P/D Effect": r.premiumDiscountEffect,
-    Distribution: r.distributionReturn,
-    Leverage: r.leverageEffect,
+    "NAV Return": parseFloat(r.navReturn.toFixed(1)),
+    "P/D Effect": parseFloat(r.premiumDiscountEffect.toFixed(1)),
+    Distribution: parseFloat(r.distributionReturn.toFixed(1)),
+    Leverage: parseFloat(r.leverageEffect.toFixed(1)),
+  }))
+
+  // Compute premium/discount from navHistory
+  const navPriceWithPremium = navHistory.map((h) => ({
+    ...h,
+    premium: parseFloat(((h.price - h.nav) / h.nav * 100).toFixed(2)),
   }))
 
   return (
@@ -40,10 +51,7 @@ export function FactorsSection() {
       {/* NAV vs Market Return Decomposition */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-sm text-foreground">NAV vs Market Return Decomposition</CardTitle>
-            <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">NEW</Badge>
-          </div>
+          <CardTitle className="text-sm text-foreground">NAV vs Market Return Decomposition</CardTitle>
           <CardDescription>Breaking total return into NAV-driven, premium/discount, distribution, and leverage components</CardDescription>
         </CardHeader>
         <CardContent>
@@ -55,19 +63,13 @@ export function FactorsSection() {
                   <XAxis dataKey="period" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                   <RechartsTooltip
-                    contentStyle={{
-                      backgroundColor: "oklch(0.16 0.018 250)",
-                      border: "1px solid oklch(0.25 0.02 250)",
-                      borderRadius: "8px",
-                      color: "oklch(0.95 0.01 250)",
-                      fontSize: "12px",
-                    }}
+                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
                     formatter={(value: number) => [`${value.toFixed(1)}%`, ""]}
                   />
                   <Legend wrapperStyle={{ fontSize: "11px", color: "oklch(0.60 0.02 250)" }} />
-                  <Bar dataKey="NAV Return" stackId="a" fill="#4a9eff" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="P/D Effect" stackId="a" fill="#34d399" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="Distribution" stackId="a" fill="#fbbf24" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="NAV Return" stackId="a" fill="#4a9eff" />
+                  <Bar dataKey="P/D Effect" stackId="a" fill="#34d399" />
+                  <Bar dataKey="Distribution" stackId="a" fill="#fbbf24" />
                   <Bar dataKey="Leverage" stackId="a" fill="#f87171" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -80,7 +82,7 @@ export function FactorsSection() {
                   <TableHead className="text-muted-foreground text-xs text-right">NAV</TableHead>
                   <TableHead className="text-muted-foreground text-xs text-right">P/D</TableHead>
                   <TableHead className="text-muted-foreground text-xs text-right">Dist.</TableHead>
-                  <TableHead className="text-muted-foreground text-xs text-right">Leverage</TableHead>
+                  <TableHead className="text-muted-foreground text-xs text-right">Lev.</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -112,15 +114,9 @@ export function FactorsSection() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={factorBarData} layout="vertical" margin={{ left: 20, right: 16 }}>
                   <XAxis type="number" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} width={100} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} width={110} />
                   <RechartsTooltip
-                    contentStyle={{
-                      backgroundColor: "oklch(0.16 0.018 250)",
-                      border: "1px solid oklch(0.25 0.02 250)",
-                      borderRadius: "8px",
-                      color: "oklch(0.95 0.01 250)",
-                      fontSize: "12px",
-                    }}
+                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
                   />
                   <Bar dataKey="exposure" name="Exposure" radius={[0, 4, 4, 0]} maxBarSize={14}>
                     {factorBarData.map((entry, index) => (
@@ -133,11 +129,11 @@ export function FactorsSection() {
           </CardContent>
         </Card>
 
-        {/* Factor Attribution Table */}
+        {/* Factor Table */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-foreground">Factor Attribution Detail</CardTitle>
-            <CardDescription>Return decomposition into NAV-driven vs premium/discount effects</CardDescription>
+            <CardDescription>Exposure, t-statistics, and significance for {overview.ticker}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -146,11 +142,11 @@ export function FactorsSection() {
                   <TableHead className="text-muted-foreground text-xs">Factor</TableHead>
                   <TableHead className="text-muted-foreground text-xs text-right">Exposure</TableHead>
                   <TableHead className="text-muted-foreground text-xs text-right">t-Stat</TableHead>
-                  <TableHead className="text-muted-foreground text-xs text-right">Contribution</TableHead>
+                  <TableHead className="text-muted-foreground text-xs text-center">Significance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {factorExposures.map((f) => (
+                {factors.map((f) => (
                   <TableRow key={f.factor} className="border-border">
                     <TableCell className="text-xs font-medium text-foreground">{f.factor}</TableCell>
                     <TableCell className="text-right font-mono text-xs">
@@ -158,33 +154,16 @@ export function FactorsSection() {
                         {f.exposure >= 0 ? "+" : ""}{f.exposure.toFixed(2)}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right font-mono text-xs">
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] font-mono ${
-                          Math.abs(f.tStat) >= 2
-                            ? "border-success/30 text-success"
-                            : "border-muted-foreground/30 text-muted-foreground"
-                        }`}
-                      >
-                        {f.tStat >= 0 ? "+" : ""}{f.tStat.toFixed(1)}
-                      </Badge>
+                    <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                      {f.tStat >= 0 ? "+" : ""}{f.tStat.toFixed(1)}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-xs">
-                      <span className={f.contribution >= 0 ? "text-success" : "text-destructive"}>
-                        {f.contribution >= 0 ? "+" : ""}{f.contribution.toFixed(1)}%
-                      </span>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className={`text-[10px] ${f.significance === "high" ? "text-success border-success/30" : f.significance === "medium" ? "text-warning border-warning/30" : "text-muted-foreground border-muted-foreground/30"}`}>
+                        {f.significance}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))}
-                <TableRow className="border-border bg-secondary/30">
-                  <TableCell className="text-xs font-semibold text-foreground">Total Explained</TableCell>
-                  <TableCell />
-                  <TableCell />
-                  <TableCell className="text-right font-mono text-xs font-semibold text-success">
-                    +{factorExposures.reduce((sum, f) => sum + f.contribution, 0).toFixed(1)}%
-                  </TableCell>
-                </TableRow>
               </TableBody>
             </Table>
           </CardContent>
@@ -194,28 +173,19 @@ export function FactorsSection() {
       {/* NAV vs Price Chart */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">NAV vs Market Price (2-Year)</CardTitle>
-          <CardDescription>Decomposing returns into NAV-driven factors vs market-price premium/discount effects</CardDescription>
+          <CardTitle className="text-sm text-foreground">NAV vs Market Price (60-Day)</CardTitle>
+          <CardDescription>Recent NAV and market price history for {overview.ticker}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px]">
+          <div className="h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={navPriceData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <LineChart data={navHistory} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
-                <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} interval={9} />
                 <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} domain={["auto", "auto"]} tickFormatter={(v) => `$${v}`} />
                 <RechartsTooltip
-                  contentStyle={{
-                    backgroundColor: "oklch(0.16 0.018 250)",
-                    border: "1px solid oklch(0.25 0.02 250)",
-                    borderRadius: "8px",
-                    color: "oklch(0.95 0.01 250)",
-                    fontSize: "12px",
-                  }}
-                  formatter={(value: number, name: string) => {
-                    if (name === "Premium/Disc") return [`${value.toFixed(2)}%`, name]
-                    return [`$${value.toFixed(2)}`, name]
-                  }}
+                  contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                  formatter={(value: number) => [`$${value.toFixed(2)}`, ""]}
                 />
                 <Legend wrapperStyle={{ fontSize: "12px", color: "oklch(0.60 0.02 250)" }} />
                 <Line type="monotone" dataKey="nav" name="NAV" stroke="#4a9eff" strokeWidth={2} dot={false} />
@@ -230,23 +200,16 @@ export function FactorsSection() {
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-foreground">Premium / Discount History</CardTitle>
-          <CardDescription>Market price deviation from NAV over 2-year period</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[200px]">
+          <div className="h-[180px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={navPriceData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <AreaChart data={navPriceWithPremium} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
-                <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} interval={9} />
                 <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                 <RechartsTooltip
-                  contentStyle={{
-                    backgroundColor: "oklch(0.16 0.018 250)",
-                    border: "1px solid oklch(0.25 0.02 250)",
-                    borderRadius: "8px",
-                    color: "oklch(0.95 0.01 250)",
-                    fontSize: "12px",
-                  }}
+                  contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
                   formatter={(value: number) => [`${value.toFixed(2)}%`, "Premium/Discount"]}
                 />
                 <Area type="monotone" dataKey="premium" stroke="#f87171" fill="#f87171" fillOpacity={0.1} strokeWidth={2} />
