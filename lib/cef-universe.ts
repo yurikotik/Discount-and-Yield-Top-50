@@ -724,6 +724,9 @@ export const cefByTicker: Record<string, CEFProfile> = Object.fromEntries(
 
 export const TOP10_TICKERS = cefUniverse.map(p => p.overview.ticker)
 
+// Alias for page-level consumption
+export const allCEFProfiles = cefUniverse
+
 // ─── Synthetic Hedge Fund Aggregation ─────────────────────────────────────────
 
 export function computeWeights(
