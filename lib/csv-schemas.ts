@@ -56,21 +56,128 @@ export interface ParseResult<T> {
 }
 
 // ─── Generic helpers ────────────────────────────────────────────────────────
+// Ported from cef_ingest.py: fuzzy column resolution, delimiter detection,
+// and common column-name candidate matching.
 
-function splitCsvLines(csv: string): string[][] {
-  const lines = csv.trim().split("\n")
-  if (lines.length < 2) return []
-  const headerCount = lines[0].split(",").length
-  return lines.slice(1).map(line => {
-    const vals = line.split(",").map(v => v.trim())
-    while (vals.length < headerCount) vals.push("")
-    return vals
-  })
+/** Detect delimiter: try comma, tab, pipe, semicolon */
+function detectDelimiter(headerLine: string): string {
+  const candidates = [",", "\t", "|", ";"]
+  let best = ","
+  let bestCount = 0
+  for (const d of candidates) {
+    const count = headerLine.split(d).length
+    if (count > bestCount) { bestCount = count; best = d }
+  }
+  return best
 }
 
-function num(val: string, fallback = 0): number {
-  const n = parseFloat(val)
+/** Split CSV handling quoted values and varying delimiters */
+function splitCsvLines(csv: string): { headers: string[]; rows: string[][]; delimiter: string } {
+  const lines = csv.trim().replace(/\r\n/g, "\n").split("\n").filter(l => l.trim() !== "")
+  if (lines.length < 2) return { headers: [], rows: [], delimiter: "," }
+  const delimiter = detectDelimiter(lines[0])
+  const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ""))
+  const rows = lines.slice(1).map(line => {
+    const vals = line.split(delimiter).map(v => v.trim().replace(/^["']|["']$/g, ""))
+    while (vals.length < headers.length) vals.push("")
+    return vals
+  })
+  return { headers, rows, delimiter }
+}
+
+/**
+ * Fuzzy column resolver -- matches CSV headers to canonical column names.
+ * Ported from Python cef_ingest.py normalize_* functions.
+ * Returns a map: canonicalName -> column index in the CSV.
+ */
+function resolveColumns(
+  headers: string[],
+  candidates: Record<string, string[]>,
+): Record<string, number> {
+  const resolved: Record<string, number> = {}
+  const lowerHeaders = headers.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ""))
+
+  for (const [canonical, aliases] of Object.entries(candidates)) {
+    const lowerAliases = aliases.map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ""))
+    const idx = lowerHeaders.findIndex(h => lowerAliases.includes(h))
+    if (idx !== -1) {
+      resolved[canonical] = idx
+    }
+  }
+  return resolved
+}
+
+function num(val: string | undefined, fallback = 0): number {
+  if (val === undefined || val === "") return fallback
+  // Strip $ and % and commas
+  const cleaned = val.replace(/[$%,]/g, "").trim()
+  const n = parseFloat(cleaned)
   return isNaN(n) ? fallback : n
+}
+
+function str(val: string | undefined, fallback = ""): string {
+  return val?.trim() || fallback
+}
+
+// ─── Column candidate maps (from cef_ingest.py) ────────────────────────────
+
+const UNIVERSE_COLUMNS: Record<string, string[]> = {
+  Ticker: ["ticker", "symbol", "fund_ticker"],
+  AUM: ["aum", "total_assets", "net_assets", "totalassets"],
+  ADV: ["adv", "avg_daily_volume", "avgdailyvolume", "volume"],
+  "1y_return": ["1y_return", "1yreturn", "return1y", "annualreturn", "total_return_1y"],
+  "90d_return": ["90d_return", "90dreturn", "return90d", "return_90d", "3m_return"],
+  avg_premium_discount: ["avg_premium_discount", "avgpremiumdiscount", "premium_discount", "premiumdiscount", "pd"],
+  yield: ["yield", "distribution_yield", "dist_yield", "divyield"],
+  realized_vol: ["realized_vol", "realizedvol", "volatility", "vol_1y", "annualvol"],
+  holdings_date: ["holdings_date", "holdingsdate", "as_of_date", "asofdate", "report_date"],
+  UNII: ["unii", "undistributed_nii", "undistributednii"],
+  distribution_coverage: ["distribution_coverage", "distributioncoverage", "dist_coverage", "coverage"],
+}
+
+const HOLDINGS_COLUMNS: Record<string, string[]> = {
+  Date: ["date", "as_of_date", "asofdate", "holdings_date", "reportdate"],
+  Ticker: ["ticker", "symbol", "holding_ticker"],
+  Issuer: ["issuer", "name", "security_name", "securityname", "description", "holding_name"],
+  Shares: ["shares", "quantity", "qty", "shares_held", "position"],
+  MarketValueUSD: ["marketvalueusd", "market_value", "marketvalue", "mv", "value", "market_value_usd", "mkt_val"],
+  "Weight%": ["weight", "weight%", "weightpct", "pct_of_fund", "portfolio_weight", "alloc"],
+}
+
+const NAV_COLUMNS: Record<string, string[]> = {
+  Date: ["date", "trade_date", "tradedate", "pricing_date"],
+  NAV: ["nav", "net_asset_value", "navpershare", "nav_per_share"],
+  MarketPrice: ["marketprice", "market_price", "price", "close", "closing_price"],
+  Volume: ["volume", "shares_traded", "daily_volume", "tradingvolume"],
+}
+
+const DISTRIBUTION_COLUMNS: Record<string, string[]> = {
+  ExDate: ["exdate", "ex_date", "ex_div_date", "record_date", "date"],
+  Amount: ["amount", "distribution", "div_amount", "per_share", "rate"],
+  Type: ["type", "dist_type", "distribution_type", "category", "income_type"],
+}
+
+/** Map common distribution type aliases to canonical enum */
+function normalizeDistType(raw: string): DistributionRow["type"] {
+  const lower = raw.toLowerCase().trim()
+  const map: Record<string, DistributionRow["type"]> = {
+    income: "income",
+    ordinary: "income",
+    "ordinary income": "income",
+    dividend: "income",
+    interest: "income",
+    roc: "roc",
+    "return of capital": "roc",
+    "capital gain": "capital-gain",
+    "capital-gain": "capital-gain",
+    "long-term capital gain": "capital-gain",
+    "short-term capital gain": "capital-gain",
+    ltcg: "capital-gain",
+    stcg: "capital-gain",
+    mixed: "mixed",
+    special: "mixed",
+  }
+  return map[lower] ?? "income"
 }
 
 // ─── Schema Parsers ─────────────────────────────────────────────────────────
@@ -78,28 +185,34 @@ function num(val: string, fallback = 0): number {
 export function parseUniverseMetrics(csv: string): ParseResult<UniverseMetricsRow> {
   const errors: ParseError[] = []
   const data: UniverseMetricsRow[] = []
-  const rows = splitCsvLines(csv)
+  const { headers, rows } = splitCsvLines(csv)
+  const col = resolveColumns(headers, UNIVERSE_COLUMNS)
+
+  // Warn about unresolved columns
+  for (const key of Object.keys(UNIVERSE_COLUMNS)) {
+    if (col[key] === undefined) errors.push({ row: 1, column: key, message: `Column not found (tried: ${UNIVERSE_COLUMNS[key].join(", ")})` })
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]
     const rn = i + 2
-    const ticker = r[0]
+    const ticker = str(r[col.Ticker ?? 0])
     if (!ticker) { errors.push({ row: rn, column: "Ticker", message: "Missing ticker" }); continue }
 
     const row: UniverseMetricsRow = {
       ticker: ticker.toUpperCase(),
-      aum: num(r[1]),
-      adv: num(r[2]),
-      return1Y: num(r[3]),
-      return90d: num(r[4]),
-      avgPremiumDiscount: num(r[5]),
-      yield: num(r[6]),
-      realizedVol: num(r[7]),
-      holdingsDate: r[8] || new Date().toISOString().slice(0, 10),
-      unii: num(r[9]),
-      distributionCoverage: num(r[10], 1),
+      aum: num(r[col.AUM ?? 1]),
+      adv: num(r[col.ADV ?? 2]),
+      return1Y: num(r[col["1y_return"] ?? 3]),
+      return90d: num(r[col["90d_return"] ?? 4]),
+      avgPremiumDiscount: num(r[col.avg_premium_discount ?? 5]),
+      yield: num(r[col.yield ?? 6]),
+      realizedVol: num(r[col.realized_vol ?? 7]),
+      holdingsDate: str(r[col.holdings_date ?? 8], new Date().toISOString().slice(0, 10)),
+      unii: num(r[col.UNII ?? 9]),
+      distributionCoverage: num(r[col.distribution_coverage ?? 10], 1),
     }
-    if (row.aum <= 0) errors.push({ row: rn, column: "AUM", message: `Invalid AUM: ${r[1]}` })
+    if (row.aum <= 0) errors.push({ row: rn, column: "AUM", message: `Invalid AUM: ${r[col.AUM ?? 1]}` })
     data.push(row)
   }
 
@@ -109,12 +222,21 @@ export function parseUniverseMetrics(csv: string): ParseResult<UniverseMetricsRo
 export function parseHoldings(csv: string): ParseResult<HoldingsRow> {
   const errors: ParseError[] = []
   const data: HoldingsRow[] = []
-  const rows = splitCsvLines(csv)
+  const { headers, rows } = splitCsvLines(csv)
+  const col = resolveColumns(headers, HOLDINGS_COLUMNS)
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]
-    if (!r[1]) errors.push({ row: i + 2, column: "Ticker", message: "Missing ticker" })
-    data.push({ date: r[0] || "", ticker: r[1] || "", issuer: r[2] || "", shares: num(r[3]), marketValueUsd: num(r[4]), weightPct: num(r[5]) })
+    const ticker = str(r[col.Ticker ?? 1])
+    if (!ticker) errors.push({ row: i + 2, column: "Ticker", message: "Missing ticker" })
+    data.push({
+      date: str(r[col.Date ?? 0]),
+      ticker,
+      issuer: str(r[col.Issuer ?? 2]),
+      shares: num(r[col.Shares ?? 3]),
+      marketValueUsd: num(r[col.MarketValueUSD ?? 4]),
+      weightPct: num(r[col["Weight%"] ?? 5]),
+    })
   }
 
   return { data, errors, rowCount: rows.length, validCount: data.length }
@@ -123,13 +245,19 @@ export function parseHoldings(csv: string): ParseResult<HoldingsRow> {
 export function parseNavPrice(csv: string): ParseResult<NavPriceRow> {
   const errors: ParseError[] = []
   const data: NavPriceRow[] = []
-  const rows = splitCsvLines(csv)
+  const { headers, rows } = splitCsvLines(csv)
+  const col = resolveColumns(headers, NAV_COLUMNS)
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]
-    const nav = num(r[1])
-    if (nav <= 0) errors.push({ row: i + 2, column: "NAV", message: `Invalid NAV: ${r[1]}` })
-    data.push({ date: r[0] || "", nav, marketPrice: num(r[2]), volume: num(r[3]) })
+    const nav = num(r[col.NAV ?? 1])
+    if (nav <= 0) errors.push({ row: i + 2, column: "NAV", message: `Invalid NAV: ${r[col.NAV ?? 1]}` })
+    data.push({
+      date: str(r[col.Date ?? 0]),
+      nav,
+      marketPrice: num(r[col.MarketPrice ?? 2]),
+      volume: num(r[col.Volume ?? 3]),
+    })
   }
 
   return { data, errors, rowCount: rows.length, validCount: data.length }
@@ -138,15 +266,15 @@ export function parseNavPrice(csv: string): ParseResult<NavPriceRow> {
 export function parseDistributions(csv: string): ParseResult<DistributionRow> {
   const errors: ParseError[] = []
   const data: DistributionRow[] = []
-  const rows = splitCsvLines(csv)
+  const { headers, rows } = splitCsvLines(csv)
+  const col = resolveColumns(headers, DISTRIBUTION_COLUMNS)
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]
-    const amt = num(r[1])
-    if (amt <= 0) errors.push({ row: i + 2, column: "Amount", message: `Invalid amount: ${r[1]}` })
-    const rawType = (r[2] || "income").toLowerCase()
-    const type = (["income", "roc", "capital-gain", "mixed"].includes(rawType) ? rawType : "income") as DistributionRow["type"]
-    data.push({ exDate: r[0] || "", amount: amt, type })
+    const amt = num(r[col.Amount ?? 1])
+    if (amt <= 0) errors.push({ row: i + 2, column: "Amount", message: `Invalid amount: ${r[col.Amount ?? 1]}` })
+    const rawType = str(r[col.Type ?? 2], "income")
+    data.push({ exDate: str(r[col.ExDate ?? 0]), amount: amt, type: normalizeDistType(rawType) })
   }
 
   return { data, errors, rowCount: rows.length, validCount: data.length }
