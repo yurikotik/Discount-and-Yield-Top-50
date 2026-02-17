@@ -15,6 +15,9 @@ import {
   type ZScoreVector,
   type PSIResult,
   type FundRanking,
+  type PillarScores,
+  PILLAR_WEIGHTS,
+  PILLAR_LABELS,
   type LeverageProbe,
   type DriftRegimeData,
   type DriftMetric,
@@ -27,8 +30,8 @@ import {
   formatBps,
 } from "./utf-data"
 
-export { formatCurrency, formatPercent, formatBps }
-export type { FundRanking }
+export { formatCurrency, formatPercent, formatBps, PILLAR_WEIGHTS, PILLAR_LABELS }
+export type { FundRanking, PillarScores }
 
 // ─── CEF Profile Types ──────────────────────────────────────────────────────
 
@@ -585,97 +588,88 @@ export const cefByTicker: Record<string, CEFProfile> = Object.fromEntries(
 
 export const TOP10_TICKERS = cefUniverse.map(p => p.overview.ticker)
 
-// ─── Z-Score / PSI Ranking Engine ───────────────────────────────────────────
-// Aligned to compute_psi.py canonical implementation
+// ─── 5-Pillar Scoring Engine ────────────────────────────────────────────────
+// Weights: Yield Quality 25%, Discount Attractiveness 25%,
+// Hercules X-Ray Stability 20%, Risk & Liquidity 15%, Momentum & Regime 15%
+// PSI is computed on NAV return distributions (baseline 365d vs recent 90d).
+// CSV Z-scores (z_yield, z_premium, z_vol, z_return) feed into pillar sub-scores.
 
-/**
- * Step 1: Filter universe (Python: AUM>500M, ADV>500K, yield>5%, holdings<90d)
- */
+// ── Helpers ──
+
+function zscoreArray(vals: number[]): number[] {
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length
+  const std = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length) || 1
+  return vals.map(v => (v - mean) / std)
+}
+
+/** Min-max normalize to [0,1] */
+function minmax(vals: number[]): number[] {
+  const mn = Math.min(...vals)
+  const mx = Math.max(...vals)
+  const range = (mx - mn) || 1
+  return vals.map(v => (v - mn) / range)
+}
+
+function clamp01(v: number): number { return Math.max(0, Math.min(1, v)) }
+
+// ── Step 1: Filters ──
+
 function applyFilters(p: CEFProfile): { passes: boolean; reasons: string[] } {
   const reasons: string[] = []
   if (p.overview.aum < 0.5) reasons.push(`AUM $${p.overview.aum}B < $0.5B threshold`)
   if (p.overview.adv < 0.5) reasons.push(`ADV $${p.overview.adv}M < $0.5M threshold`)
   if (p.overview.distributionRate < 5) reasons.push(`Yield ${p.overview.distributionRate}% < 5% threshold`)
-  // holdings staleness check (90 day max)
   const holdDate = new Date(p.overview.holdingsDate)
   const daysSince = Math.floor((Date.now() - holdDate.getTime()) / 86400000)
   if (daysSince > 90) reasons.push(`Holdings ${daysSince}d stale (>90d)`)
   return { passes: reasons.length === 0, reasons }
 }
 
-/**
- * Step 2a: Extract the 4 raw metrics matching CSV columns
- */
+// ── Step 2: Extract 4 CSV metrics & Z-score them ──
+
 function extractMetrics(p: CEFProfile): FundMetricVector {
   return {
-    yield: p.overview.distributionRate / 100,     // as decimal to match CSV
+    yield: p.overview.distributionRate / 100,
     avgPremiumDiscount: p.overview.premiumDiscount / 100,
     realizedVol: p.performance.volatility1Y / 100,
     return1Y: p.performance.return1Y / 100,
   }
 }
 
-/**
- * Step 2b: zscore(M_i) = (M_i - mean) / std across universe
- * Step 3: composite_z = mean([z_yield, z_premium, z_vol, z_return])  (equal weight)
- */
 function computeZScores(profiles: CEFProfile[]): { zScores: ZScoreVector[]; metrics: FundMetricVector[] } {
   const metrics = profiles.map(extractMetrics)
-
-  function zscoreArray(vals: number[]): number[] {
-    const mean = vals.reduce((a, b) => a + b, 0) / vals.length
-    const std = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length) || 1
-    return vals.map(v => (v - mean) / std)
-  }
-
   const zYields = zscoreArray(metrics.map(m => m.yield))
   const zPremiums = zscoreArray(metrics.map(m => m.avgPremiumDiscount))
   const zVols = zscoreArray(metrics.map(m => m.realizedVol))
   const zReturns = zscoreArray(metrics.map(m => m.return1Y))
 
-  const zScores: ZScoreVector[] = metrics.map((_, i) => {
-    const zY = zYields[i]
-    const zP = zPremiums[i]
-    const zV = zVols[i]
-    const zR = zReturns[i]
-    return {
-      zYield: parseFloat(zY.toFixed(4)),
-      zPremium: parseFloat(zP.toFixed(4)),
-      zVol: parseFloat(zV.toFixed(4)),
-      zReturn: parseFloat(zR.toFixed(4)),
-      compositeZ: parseFloat(((zY + zP + zV + zR) / 4).toFixed(4)),
-    }
-  })
-
+  const zScores: ZScoreVector[] = metrics.map((_, i) => ({
+    zYield: parseFloat(zYields[i].toFixed(4)),
+    zPremium: parseFloat(zPremiums[i].toFixed(4)),
+    zVol: parseFloat(zVols[i].toFixed(4)),
+    zReturn: parseFloat(zReturns[i].toFixed(4)),
+    compositeZ: parseFloat(((zYields[i] + zPremiums[i] + zVols[i] + zReturns[i]) / 4).toFixed(4)),
+  }))
   return { zScores, metrics }
 }
 
-/**
- * Step 4: PSI - compare recent 90d window vs prior 365d baseline
- * Uses NAV return distribution bins, matching scipy qcut logic in Python.
- * PSI < 0.1 = stable, 0.1-0.25 = shifting, > 0.25 = unstable
- */
+// ── Step 3: PSI ──
+
 function computePSI(profile: CEFProfile): PSIResult {
   const navHist = profile.navHistory
   if (navHist.length < 6) return { psi: 0, significantBins: 0, totalBins: 10, regime: "stable" }
-
-  // Split: baseline = first 75%, recent = last 25% (approximates 365d vs 90d)
   const splitIdx = Math.floor(navHist.length * 0.75)
   const baseline = navHist.slice(0, splitIdx)
   const recent = navHist.slice(splitIdx)
-
   const navReturns = (arr: NAVPricePoint[]) => arr.slice(1).map((v, i) => (v.nav - arr[i].nav) / arr[i].nav)
   const baseReturns = navReturns(baseline)
   const recentReturns = navReturns(recent)
-
-  // Binned PSI (10 bins)
   const numBins = 10
   const allReturns = [...baseReturns, ...recentReturns]
   const minR = Math.min(...allReturns, -0.05)
   const maxR = Math.max(...allReturns, 0.05)
   const binWidth = (maxR - minR) / numBins
-  const eps = 1e-8 // avoid log(0), matching Python's replace(0, 1e-8)
-
+  const eps = 1e-8
   let psi = 0
   let significantBins = 0
   for (let b = 0; b < numBins; b++) {
@@ -687,53 +681,117 @@ function computePSI(profile: CEFProfile): PSIResult {
     psi += binPsi
     if (Math.abs(binPsi) > 0.02) significantBins++
   }
-
   psi = Math.abs(psi)
   const regime: PSIResult["regime"] = psi < 0.1 ? "stable" : psi < 0.25 ? "shifting" : "unstable"
   return { psi: parseFloat(psi.toFixed(4)), significantBins, totalBins: numBins, regime }
 }
 
-/**
- * Steps 5-6: Normalize and score
- *   z_norm = (composite_z - min) / (max - min)
- *   psi_norm = (PSI - min) / (max - min)
- *   score = 0.7 * z_norm + 0.3 * (1 - psi_norm)
- * Sort descending, pick Top 10
- */
+// ── Step 4: Compute 5 Pillar scores per fund ──
+
+function computePillarScores(profiles: CEFProfile[], zScores: ZScoreVector[], psiResults: PSIResult[]): PillarScores[] {
+  // Pre-compute cross-universe normalized arrays
+  const distCovs = profiles.map(p => p.overview.distributionCoverage)
+  const uniis = profiles.map(p => p.overview.unii)
+  const levAdjYields = profiles.map(p => p.overview.distributionRate / (1 + p.overview.leverageRatio / 100))
+  const nDistCov = minmax(distCovs)
+  const nUnii = minmax(uniis)
+  const nLevAdjYield = minmax(levAdjYields)
+
+  // Discount: deeper discount = more attractive (negate P/D)
+  const negPDs = profiles.map(p => -p.overview.premiumDiscount)
+  const pdVols = profiles.map(p => p.risk.volatility90d > 0 ? 1 / p.risk.volatility90d : 0.5)
+  const meanRevProbs = profiles.map(p => {
+    const zDisc = p.risk.zScoreDiscount
+    return clamp01((zDisc + 3) / 6) // map z from [-3,3] to [0,1]
+  })
+  const nNegPD = minmax(negPDs)
+  const nPDVol = minmax(pdVols)
+  const nMeanRev = minmax(meanRevProbs)
+
+  // X-Ray Stability: holdings freshness, factor drift, leverage stability, residual
+  const freshness = profiles.map(p => {
+    const days = Math.floor((Date.now() - new Date(p.overview.holdingsDate).getTime()) / 86400000)
+    return clamp01(1 - days / 180) // fresh = 1, 180d stale = 0
+  })
+  const driftStab = profiles.map(p =>
+    p.driftRegime.currentRegime === "stable" ? 1 : p.driftRegime.currentRegime === "transitioning" ? 0.5 : 0
+  )
+  const levStab = profiles.map(p => clamp01(1 - Math.abs(p.leverageProbe.realizedVsReconstructed) / 5))
+  const residStab = profiles.map(p => p.leverageProbe.residualFlagged ? 0 : 1)
+  const nFresh = minmax(freshness)
+  const nDrift = minmax(driftStab)
+  const nLevStab = minmax(levStab)
+
+  // Risk & Liquidity: lower vol = better, shallower drawdown = better, higher ADV = better
+  const invVols = profiles.map(p => 1 / (p.performance.volatility1Y || 1))
+  const invDD = profiles.map(p => 1 / (Math.abs(p.performance.maxDrawdown1Y) || 1))
+  const advs = profiles.map(p => p.overview.adv)
+  const nInvVol = minmax(invVols)
+  const nInvDD = minmax(invDD)
+  const nAdv = minmax(advs)
+
+  // Momentum & Regime: 90d return, sector regime alignment via PSI stability
+  const mom90 = profiles.map(p => p.overview.return90d)
+  const regimeFit = psiResults.map(r => r.regime === "stable" ? 1 : r.regime === "shifting" ? 0.5 : 0)
+  const nMom90 = minmax(mom90)
+  const nRegime = minmax(regimeFit)
+
+  return profiles.map((_, i) => ({
+    yieldQuality: parseFloat((
+      0.40 * nDistCov[i] + 0.30 * nUnii[i] + 0.30 * nLevAdjYield[i]
+    ).toFixed(4)),
+    discountAttractiveness: parseFloat((
+      0.45 * nNegPD[i] + 0.25 * nPDVol[i] + 0.30 * nMeanRev[i]
+    ).toFixed(4)),
+    xrayStability: parseFloat((
+      0.25 * nFresh[i] + 0.30 * nDrift[i] + 0.25 * nLevStab[i] + 0.20 * residStab[i]
+    ).toFixed(4)),
+    riskLiquidity: parseFloat((
+      0.40 * nInvVol[i] + 0.30 * nInvDD[i] + 0.30 * nAdv[i]
+    ).toFixed(4)),
+    momentumRegime: parseFloat((
+      0.60 * nMom90[i] + 0.40 * nRegime[i]
+    ).toFixed(4)),
+  }))
+}
+
+// ── Step 5: Aggregate score = weighted sum of pillars ──
+
+function computeWeightedScore(pillars: PillarScores): number {
+  let score = 0
+  for (const key of Object.keys(PILLAR_WEIGHTS) as (keyof PillarScores)[]) {
+    score += pillars[key] * PILLAR_WEIGHTS[key]
+  }
+  return parseFloat(score.toFixed(4))
+}
+
+// ── Step 6: Full ranking pipeline ──
+
 export function computeRankings(profiles: CEFProfile[]): FundRanking[] {
   const { zScores, metrics } = computeZScores(profiles)
   const psiResults = profiles.map(computePSI)
   const filters = profiles.map(applyFilters)
+  const pillarScores = computePillarScores(profiles, zScores, psiResults)
 
   const composites = zScores.map(z => z.compositeZ)
   const psis = psiResults.map(p => p.psi)
+  const nComposites = minmax(composites)
+  const nPsis = minmax(psis)
 
-  // Min-max normalization
-  const zMin = Math.min(...composites)
-  const zMax = Math.max(...composites)
-  const zRange = (zMax - zMin) || 1
-  const psiMin = Math.min(...psis)
-  const psiMax = Math.max(...psis)
-  const psiRange = (psiMax - psiMin) || 1
-
-  const rankings: FundRanking[] = profiles.map((p, i) => {
-    const zNorm = (composites[i] - zMin) / zRange
-    const psiNorm = (psis[i] - psiMin) / psiRange
-    const score = 0.7 * zNorm + 0.3 * (1 - psiNorm)
-    return {
-      ticker: p.overview.ticker,
-      metrics: metrics[i],
-      zScores: zScores[i],
-      compositeZ: composites[i],
-      zNorm: parseFloat(zNorm.toFixed(4)),
-      psiResult: psiResults[i],
-      psiNorm: parseFloat(psiNorm.toFixed(4)),
-      score: parseFloat(score.toFixed(4)),
-      rank: 0,
-      passesFilter: filters[i].passes,
-      filterReasons: filters[i].reasons,
-    }
-  })
+  const rankings: FundRanking[] = profiles.map((p, i) => ({
+    ticker: p.overview.ticker,
+    metrics: metrics[i],
+    zScores: zScores[i],
+    compositeZ: composites[i],
+    zNorm: parseFloat(nComposites[i].toFixed(4)),
+    psiResult: psiResults[i],
+    psiNorm: parseFloat(nPsis[i].toFixed(4)),
+    pillars: pillarScores[i],
+    score: computeWeightedScore(pillarScores[i]),
+    rank: 0,
+    passesFilter: filters[i].passes,
+    filterReasons: filters[i].reasons,
+  }))
 
   rankings.sort((a, b) => b.score - a.score)
   rankings.forEach((r, i) => { r.rank = i + 1 })

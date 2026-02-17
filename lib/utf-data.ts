@@ -73,15 +73,17 @@ export interface RiskMetrics {
 }
 
 // ─── Z-Score / PSI Ranking Types ────────────────────────────────────────────
+// 5-pillar weighted scoring model from Top-50 -> Top-10 spec
 
-// Matches universe_cef_metrics.csv columns used in compute_psi.py
+// Raw metrics extracted per fund for Z-scoring
 export interface FundMetricVector {
-  yield: number               // distribution yield
-  avgPremiumDiscount: number  // avg_premium_discount
-  realizedVol: number         // realized_vol (1Y)
-  return1Y: number            // 1y_return
+  yield: number               // distribution yield (decimal)
+  avgPremiumDiscount: number  // avg_premium_discount (decimal)
+  realizedVol: number         // realized_vol 1Y (decimal)
+  return1Y: number            // 1y_return (decimal)
 }
 
+// Per-fund Z-scores on the 4 CSV metrics
 export interface ZScoreVector {
   zYield: number
   zPremium: number
@@ -97,17 +99,42 @@ export interface PSIResult {
   regime: "stable" | "shifting" | "unstable"
 }
 
+// 5-pillar scores, each normalized to [0,1] where 1 = best
+export interface PillarScores {
+  yieldQuality: number       // 25% — dist coverage, UNII trend, lev-adj yield
+  discountAttractiveness: number // 25% — current discount Z, vol, mean-reversion
+  xrayStability: number      // 20% — holdings freshness, factor drift, leverage stability
+  riskLiquidity: number      // 15% — realized vol, drawdown, ADV
+  momentumRegime: number     // 15% — 90d NAV momentum, sector regime alignment
+}
+
+export const PILLAR_WEIGHTS: Record<keyof PillarScores, number> = {
+  yieldQuality: 0.25,
+  discountAttractiveness: 0.25,
+  xrayStability: 0.20,
+  riskLiquidity: 0.15,
+  momentumRegime: 0.15,
+}
+
+export const PILLAR_LABELS: Record<keyof PillarScores, string> = {
+  yieldQuality: "Yield Quality",
+  discountAttractiveness: "Discount Attractiveness",
+  xrayStability: "X-Ray Stability",
+  riskLiquidity: "Risk & Liquidity",
+  momentumRegime: "Momentum & Regime",
+}
+
 export interface FundRanking {
   ticker: string
   metrics: FundMetricVector
   zScores: ZScoreVector
-  compositeZ: number     // raw composite z (mean of 4)
+  compositeZ: number     // raw composite z (mean of 4 CSV z-scores)
   zNorm: number          // min-max normalized composite z [0,1]
   psiResult: PSIResult
   psiNorm: number        // min-max normalized PSI [0,1]
-  score: number          // 0.7 * zNorm + 0.3 * (1 - psiNorm)
+  pillars: PillarScores  // 5-pillar breakdown
+  score: number          // weighted sum: sum(pillar_i * weight_i)
   rank: number
-  // Filter status
   passesFilter: boolean
   filterReasons: string[]
 }

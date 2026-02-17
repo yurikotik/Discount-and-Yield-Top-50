@@ -1,7 +1,7 @@
 "use client"
 
 import type { CEFProfile } from "@/lib/cef-universe"
-import { type FundRanking } from "@/lib/cef-universe"
+import { type FundRanking, type PillarScores, PILLAR_LABELS, PILLAR_WEIGHTS } from "@/lib/cef-universe"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -203,6 +203,71 @@ export function FundComparison({ funds, rankings, onNavigateToFund }: Props) {
                   <TableCell className="text-right font-mono text-xs text-foreground">${c.totalAum}B</TableCell>
                   <TableCell className="text-right font-mono text-xs text-foreground">{c.avgReturn}%</TableCell>
                   <TableCell className="text-right font-mono text-xs text-foreground">{c.avgDist}%</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* 5-Pillar Heatmap */}
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-foreground">5-Pillar Scoring Heatmap</CardTitle>
+          <CardDescription>Score = 0.25 Yield + 0.25 Discount + 0.20 X-Ray + 0.15 Risk + 0.15 Momentum | Selection rule: rank by composite, tie-break on deeper discount, stronger coverage, lower drift</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground text-xs">#</TableHead>
+                <TableHead className="text-muted-foreground text-xs">Ticker</TableHead>
+                {(Object.keys(PILLAR_LABELS) as (keyof PillarScores)[]).map(key => (
+                  <TableHead key={key} className="text-muted-foreground text-xs text-center">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-[10px]">{PILLAR_LABELS[key]}</span>
+                      <span className="text-[8px] text-muted-foreground/60">{(PILLAR_WEIGHTS[key] * 100).toFixed(0)}%</span>
+                    </div>
+                  </TableHead>
+                ))}
+                <TableHead className="text-muted-foreground text-xs text-right">Score</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">PSI</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-center">Filter</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rankings.map((rank) => (
+                <TableRow
+                  key={rank.ticker}
+                  className="border-border cursor-pointer transition-colors hover:bg-primary/5"
+                  onClick={() => onNavigateToFund(rank.ticker)}
+                >
+                  <TableCell className="font-mono text-xs font-bold text-muted-foreground">#{rank.rank}</TableCell>
+                  <TableCell className="font-mono text-xs font-bold text-primary">{rank.ticker}</TableCell>
+                  {(Object.keys(PILLAR_LABELS) as (keyof PillarScores)[]).map(key => {
+                    const val = rank.pillars[key]
+                    const bg = val >= 0.7 ? "bg-success/15 text-success" : val >= 0.4 ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive"
+                    return (
+                      <TableCell key={key} className="text-center p-1">
+                        <span className={`inline-block rounded px-2 py-0.5 font-mono text-xs ${bg}`}>
+                          {val.toFixed(2)}
+                        </span>
+                      </TableCell>
+                    )
+                  })}
+                  <TableCell className="text-right font-mono text-xs font-bold text-primary">{rank.score.toFixed(3)}</TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant="outline" className={`font-mono text-[10px] ${rank.psiResult.regime === "stable" ? "text-success border-success/30" : rank.psiResult.regime === "shifting" ? "text-warning border-warning/30" : "text-destructive border-destructive/30"}`}>
+                      {rank.psiResult.regime}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {rank.passesFilter ? (
+                      <Badge variant="outline" className="text-[9px] text-success border-success/30">PASS</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[9px] text-destructive border-destructive/30" title={rank.filterReasons.join("; ")}>FAIL</Badge>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
