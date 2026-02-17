@@ -1,4 +1,5 @@
 // ─── 40 Additional CEF Profiles from Barchart CSV (2026-02-13) ──────────────
+// Combined with 10 core profiles (UTF PDI RQI PTY GOF EOS STK USA UTG DNP) = 50 total.
 // Real: ticker, name, last price, volume. Generated: strategy/category, holdings, factors.
 //
 // Canonical CSV schema (9 columns):
@@ -142,8 +143,9 @@ function bc(
   }
 }
 
-// ─── All 40 additional tickers from Barchart CSV ────────────────────────────
+// ─── 40 additional tickers from Barchart CSV ────────────────────────────────
 // Organized by category, using real prices & volumes from 2026-02-13
+// Core 10 (UTF PDI RQI PTY GOF EOS STK USA UTG DNP) are NOT included here.
 
 export const barchartSeeds: BarchartFundSeed[] = [
   // Global / Multi-Asset
@@ -162,31 +164,31 @@ export const barchartSeeds: BarchartFundSeed[] = [
   bc("TY", "Tri Continental Corp", 33.17, 33100, "equity", { aum: 1.6, dist: 3.2, lev: 0, pd: -12.6, ret1y: 16.4, ret90d: 4.1, vol1y: 14.8, unii: 0.38, distCov: 1.45, strategy: "Diversified large-cap equity with balanced approach" }),
   bc("FFA", "FT Enhanced Equity Income Fund", 21.86, 30100, "equity", { aum: 0.7, dist: 7.8, lev: 0, pd: -5.2, ret1y: 14.8, ret90d: 3.6, vol1y: 13.8, unii: 0.14, distCov: 1.08, strategy: "Enhanced equity income with covered calls" }),
   bc("ASG", "Liberty All-Star Growth Fund", 5.14, 373000, "equity", { aum: 0.8, dist: 8.2, lev: 0, pd: -8.8, ret1y: 20.2, ret90d: 5.8, vol1y: 16.4, unii: 0.08, distCov: 1.02, strategy: "Growth equity multi-manager approach" }),
-  bc("ETJ", "Eaton Vance Risk-Managed Diversified Equity", 8.71, 140200, "equity", { aum: 1.2, dist: 8.4, lev: 0, pd: -7.6, ret1y: 11.2, ret90d: 2.8, vol1y: 10.8, unii: 0.06, distCov: 0.96, strategy: "Risk-managed equity with hedging overlay" }),
+
   bc("ETV", "Eaton Vance Corp", 14.65, 177200, "equity", { aum: 1.8, dist: 8.8, lev: 0, pd: -4.8, ret1y: 16.8, ret90d: 4.2, vol1y: 14.2, unii: 0.10, distCov: 1.04, strategy: "Tax-managed equity income with options" }),
   bc("EVT", "Eaton Vance Tax Advantaged Dividend", 26.39, 101300, "equity", { aum: 1.6, dist: 7.2, lev: 22, pd: -3.8, ret1y: 14.2, ret90d: 3.5, vol1y: 13.4, unii: 0.16, distCov: 1.12, strategy: "Tax-advantaged dividend equity with leverage" }),
   bc("BSTZ", "Blackrock Science and Technology Trust II", 22.75, 137600, "equity", { aum: 2.4, dist: 11.2, lev: 0, pd: -8.2, ret1y: 22.4, ret90d: 6.4, vol1y: 20.2, unii: -0.15, distCov: 0.78, strategy: "Global technology and science equity" }),
   bc("NBXG", "Neuberger Next Gen Connectivity Fund Inc", 13.40, 404700, "equity", { aum: 1.1, dist: 10.8, lev: 0, pd: -12.4, ret1y: 24.6, ret90d: 7.2, vol1y: 22.4, unii: -0.20, distCov: 0.72, strategy: "Next-gen connectivity and 5G equity" }),
   bc("QQQX", "Nuveen Nasdaq 100", 27.49, 81700, "equity", { aum: 1.5, dist: 7.4, lev: 0, pd: -2.4, ret1y: 19.8, ret90d: 5.5, vol1y: 17.8, unii: 0.12, distCov: 1.06, strategy: "Nasdaq-100 equity with covered call overlay" }),
   bc("BXMX", "Nuveen Equity Premium", 14.72, 134100, "equity", { aum: 1.3, dist: 7.6, lev: 0, pd: -4.2, ret1y: 13.4, ret90d: 3.2, vol1y: 12.8, unii: 0.10, distCov: 1.02, strategy: "S&P 500 buy-write strategy" }),
-  bc("DIAX", "Nuveen Dow", 15.68, 73100, "equity", { aum: 0.8, dist: 6.8, lev: 0, pd: -5.6, ret1y: 11.8, ret90d: 2.8, vol1y: 12.4, unii: 0.14, distCov: 1.10, strategy: "DJIA buy-write strategy" }),
+
   bc("IDE", "VOYA Infrastructure Industrial", 14.05, 94700, "infrastructure", { aum: 0.5, dist: 7.8, lev: 12, pd: -6.8, ret1y: 13.2, ret90d: 3.4, vol1y: 14.8, unii: 0.08, distCov: 0.98, strategy: "Industrials and infrastructure equity" }),
 
   // Healthcare / Life Sciences
   bc("HQH", "Abrdn Healthcare Investors Fund", 19.89, 230200, "equity", { aum: 1.2, dist: 8.6, lev: 0, pd: -10.2, ret1y: 16.4, ret90d: 4.8, vol1y: 18.6, unii: 0.05, distCov: 0.92, strategy: "Healthcare and biotechnology equity" }),
-  bc("HQL", "Abrdn Life Sciences Investors Fund", 16.98, 149300, "equity", { aum: 0.8, dist: 8.2, lev: 0, pd: -11.4, ret1y: 15.8, ret90d: 4.4, vol1y: 19.2, unii: 0.04, distCov: 0.88, strategy: "Life sciences and pharma equity" }),
+
 
   // Fixed Income / High Yield
   bc("DSL", "Doubleline Income Solutions Fund", 11.56, 630200, "fixed-income", { aum: 3.2, dist: 9.4, lev: 32, pd: -2.8, ret1y: 8.8, ret90d: 2.0, vol1y: 10.4, unii: -0.06, distCov: 0.92, strategy: "Multi-sector income with EM and MBS" }),
-  bc("DHF", "Dreyfus High Yield Strategies Fund", 2.56, 202600, "fixed-income", { aum: 0.4, dist: 9.8, lev: 28, pd: -6.4, ret1y: 7.4, ret90d: 1.6, vol1y: 11.2, unii: -0.10, distCov: 0.84, strategy: "High yield corporate bonds" }),
+
   bc("EFR", "Eaton Vance Senior Floating-Rate Fund", 11.09, 56800, "fixed-income", { aum: 0.8, dist: 7.2, lev: 32, pd: -3.2, ret1y: 8.2, ret90d: 2.2, vol1y: 8.4, unii: 0.08, distCov: 1.04, strategy: "Senior floating-rate bank loans" }),
   bc("JGH", "Nuveen Global High Income Fund", 12.85, 112300, "fixed-income", { aum: 1.4, dist: 8.8, lev: 26, pd: -5.8, ret1y: 9.2, ret90d: 2.4, vol1y: 11.6, unii: -0.04, distCov: 0.94, strategy: "Global high income multi-sector" }),
   bc("HYI", "Western Asset High Yield Opportunity Fund Inc", 11.22, 68600, "fixed-income", { aum: 0.6, dist: 8.4, lev: 28, pd: -4.8, ret1y: 8.6, ret90d: 2.0, vol1y: 10.8, unii: -0.02, distCov: 0.96, strategy: "High yield corporate with leveraged exposure" }),
-  bc("HIO", "Western Asset High", 3.81, 401300, "fixed-income", { aum: 1.8, dist: 7.8, lev: 24, pd: -7.2, ret1y: 7.8, ret90d: 1.8, vol1y: 9.8, unii: 0.02, distCov: 0.98, strategy: "High income opportunity fixed income" }),
+
   bc("BGX", "Blackstone Long-Short Credit Income Fund", 11.29, 75400, "fixed-income", { aum: 0.5, dist: 8.2, lev: 18, pd: -2.4, ret1y: 9.4, ret90d: 2.6, vol1y: 9.2, unii: 0.06, distCov: 1.02, strategy: "Long-short credit with hedged exposure" }),
 
   // Municipal Bonds
-  bc("BFZ", "Blackrock California Muni Trust", 11.11, 50000, "fixed-income", { aum: 0.4, dist: 5.2, lev: 32, pd: -8.8, ret1y: 4.8, ret90d: 1.0, vol1y: 8.2, unii: 0.04, distCov: 1.08, strategy: "California municipal bonds", sectorWeights: muniSectors }),
+
   bc("PCQ", "Pimco California Muni", 9.12, 139200, "fixed-income", { aum: 0.8, dist: 5.8, lev: 38, pd: -4.2, ret1y: 5.4, ret90d: 1.2, vol1y: 9.4, unii: 0.02, distCov: 1.02, strategy: "California municipal income with high leverage", sectorWeights: muniSectors }),
 
   // Real Assets / REIT / Infrastructure
@@ -198,7 +200,7 @@ export const barchartSeeds: BarchartFundSeed[] = [
   bc("WIW", "U.S Treasury Inflation Prot Secs Fd 2", 8.77, 277300, "fixed-income", { aum: 1.2, dist: 5.4, lev: 22, pd: -8.2, ret1y: 4.2, ret90d: 0.8, vol1y: 7.8, unii: 0.06, distCov: 1.12, strategy: "US TIPS and inflation-linked securities" }),
 
   // Convertible / Specialty
-  bc("BCV", "Bancroft Convertible Fund", 23.39, 12500, "multi-asset", { aum: 0.2, dist: 4.8, lev: 0, pd: -10.4, ret1y: 12.8, ret90d: 3.2, vol1y: 14.2, unii: 0.18, distCov: 1.25, strategy: "Convertible securities focused", sectorWeights: convertibleSectors }),
+
   bc("NCZ", "Virtus Convertible & Income Fund II", 14.89, 38900, "multi-asset", { aum: 0.4, dist: 8.6, lev: 28, pd: -4.6, ret1y: 10.2, ret90d: 2.8, vol1y: 13.8, unii: -0.04, distCov: 0.94, strategy: "Convertible bonds and high income", sectorWeights: convertibleSectors }),
   bc("NIE", "Virtus Equity & Convertible Income Fund", 25.18, 37000, "multi-asset", { aum: 0.6, dist: 7.2, lev: 0, pd: -6.8, ret1y: 14.4, ret90d: 3.6, vol1y: 14.6, unii: 0.12, distCov: 1.08, strategy: "Equity and convertible income blend" }),
   bc("ZTR", "Virtus Total Return Fund Inc", 6.89, 374300, "multi-asset", { aum: 0.4, dist: 10.2, lev: 20, pd: -8.4, ret1y: 8.8, ret90d: 2.4, vol1y: 14.8, unii: -0.10, distCov: 0.82, strategy: "Total return multi-asset income" }),
@@ -209,11 +211,11 @@ export const barchartSeeds: BarchartFundSeed[] = [
   bc("GNT", "Gabelli Natural Resources Gold", 8.59, 78100, "equity", { aum: 0.3, dist: 4.6, lev: 0, pd: -14.8, ret1y: 18.4, ret90d: 6.8, vol1y: 24.2, unii: 0.30, distCov: 1.48, strategy: "Natural resources and gold equity", sectorWeights: resourcesSectors }),
 
   // Emerging Markets / International
-  bc("CAF", "MS China A Share Fund", 17.98, 7300, "equity", { aum: 0.3, dist: 0, lev: 0, pd: -18.2, ret1y: 8.2, ret90d: 4.8, vol1y: 22.8, unii: 0, distCov: 0, strategy: "China A-share equity" }),
+
   bc("EDD", "MS Emerging Markets Domestic Debt Fund", 6.17, 465000, "fixed-income", { aum: 0.8, dist: 8.4, lev: 0, pd: -12.6, ret1y: 6.4, ret90d: 2.2, vol1y: 14.8, unii: 0.04, distCov: 0.92, strategy: "EM local currency sovereign debt" }),
   bc("TDF", "Templeton Dragon Fund", 11.60, 32800, "equity", { aum: 0.4, dist: 2.4, lev: 0, pd: -16.4, ret1y: 10.2, ret90d: 5.0, vol1y: 20.4, unii: 0.18, distCov: 1.42, strategy: "Greater China equity" }),
 
   // Activist / Special Situations
   bc("SABA", "Saba Capital Income & Opportunities Fund II", 8.01, 62300, "multi-asset", { aum: 0.4, dist: 7.8, lev: 0, pd: -6.4, ret1y: 8.8, ret90d: 2.0, vol1y: 11.4, unii: 0.04, distCov: 0.96, strategy: "Credit and special situations with activist overlay" }),
-  bc("HGLB", "Highland Global Allocation Fund", 8.74, 30300, "multi-asset", { aum: 0.2, dist: 9.2, lev: 0, pd: -18.4, ret1y: 6.8, ret90d: 1.8, vol1y: 16.2, unii: -0.12, distCov: 0.78, strategy: "Global allocation with alternative assets" }),
+
 ]
