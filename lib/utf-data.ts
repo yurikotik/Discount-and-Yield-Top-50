@@ -351,6 +351,114 @@ export const fundOverview = {
   asOfDate: "Dec 31, 2025",
 }
 
+// Tiered slippage by notional band
+export interface SlippageTier {
+  notionalBand: string
+  notionalMin: number
+  notionalMax: number
+  bidAskSlippage: number
+  marketImpact: number
+  totalSlippage: number
+  notes: string
+}
+
+export const slippageTiers: SlippageTier[] = [
+  { notionalBand: "$0 - $10M", notionalMin: 0, notionalMax: 10000000, bidAskSlippage: 3, marketImpact: 2, totalSlippage: 5, notes: "Minimal market impact; can be executed intraday" },
+  { notionalBand: "$10M - $25M", notionalMin: 10000000, notionalMax: 25000000, bidAskSlippage: 5, marketImpact: 5, totalSlippage: 10, notes: "Moderate impact; 1-2 day execution recommended" },
+  { notionalBand: "$25M - $50M", notionalMin: 25000000, notionalMax: 50000000, bidAskSlippage: 8, marketImpact: 10, totalSlippage: 18, notes: "Significant impact; VWAP/TWAP over 2-3 days" },
+  { notionalBand: "$50M - $100M", notionalMin: 50000000, notionalMax: 100000000, bidAskSlippage: 12, marketImpact: 18, totalSlippage: 30, notes: "High impact; 3-5 day algo execution required" },
+  { notionalBand: "$100M+", notionalMin: 100000000, notionalMax: 999999999, bidAskSlippage: 18, marketImpact: 30, totalSlippage: 48, notes: "Severe impact; block facilitation or dark pools recommended" },
+]
+
+// NAV vs Market return decomposition
+export interface ReturnDecomposition {
+  period: string
+  totalReturn: number
+  navReturn: number
+  premiumDiscountEffect: number
+  distributionReturn: number
+  leverageEffect: number
+}
+
+export const returnDecomposition: ReturnDecomposition[] = [
+  { period: "3 Month", totalReturn: 4.2, navReturn: 3.1, premiumDiscountEffect: 0.4, distributionReturn: 1.95, leverageEffect: -1.25 },
+  { period: "6 Month", totalReturn: 8.8, navReturn: 6.5, premiumDiscountEffect: 0.8, distributionReturn: 3.9, leverageEffect: -2.4 },
+  { period: "1 Year", totalReturn: 15.6, navReturn: 11.2, premiumDiscountEffect: 1.2, distributionReturn: 7.8, leverageEffect: -4.6 },
+  { period: "2 Year", totalReturn: 28.4, navReturn: 20.8, premiumDiscountEffect: 2.1, distributionReturn: 15.6, leverageEffect: -10.1 },
+]
+
+// Correlation regime comparison (90d vs 180d)
+export interface CorrelationRegime {
+  basket: string
+  corr90d: number
+  corr180d: number
+  delta: number
+  stressCorr: number
+  regimeStable: boolean
+}
+
+export const correlationRegimes: CorrelationRegime[] = [
+  { basket: "Core Infrastructure Blend", corr90d: 0.964, corr180d: 0.951, delta: -0.013, stressCorr: 0.918, regimeStable: true },
+  { basket: "Income-Focused Replication", corr90d: 0.948, corr180d: 0.939, delta: -0.009, stressCorr: 0.892, regimeStable: false },
+  { basket: "Minimum Tracking Error", corr90d: 0.971, corr180d: 0.958, delta: -0.013, stressCorr: 0.932, regimeStable: true },
+]
+
+// Input checklist items
+export interface InputChecklistItem {
+  item: string
+  source: string
+  status: "ready" | "pending" | "action-required"
+  action: string
+}
+
+export const inputChecklist: InputChecklistItem[] = [
+  { item: "UTF Q4 2025 Holdings CSV", source: "Cohen & Steers fund page", status: "ready", action: "Download latest holdings CSV" },
+  { item: "2-Year Daily NAV & Market Price", source: "CEF Connect or Yahoo Finance", status: "ready", action: "Export daily NAV and market price CSVs" },
+  { item: "Distribution History", source: "Cohen & Steers / Yahoo Finance", status: "ready", action: "Capture distribution dates and amounts" },
+  { item: "Premium/Discount Chart (2-year)", source: "CEF Connect", status: "ready", action: "Export screenshot or CSV" },
+  { item: "Target Notional", source: "User-defined", status: "ready", action: "$50,000,000 (set)" },
+  { item: "Execution Assumptions", source: "Internal", status: "ready", action: "5-10 bps for ETFs under $1B ADV; escalate for lower liquidity" },
+]
+
+// Hercules prompt (final, ready to paste)
+export const herculesPrompt = `Analyze UTF (Cohen & Steers Infrastructure Fund, NYSE:UTF) using the latest disclosed holdings (Q4 2025 CSV from Cohen & Steers) and 2-year daily NAV and market price data. Perform the following and return structured outputs:
+
+1. Holdings Decomposition:
+   - Parse holdings into USD-weighted sector and issuer exposures.
+   - Report top 20 positions, concentration metrics, and estimated liquidity score per holding.
+
+2. Factor Attribution:
+   - Estimate exposures to value, momentum, dividend yield, credit sensitivity, duration, REIT/infra, and sector factors.
+   - Decompose returns into NAV-driven factors vs market-price (premium/discount) effects.
+
+3. Proxy Construction:
+   - Produce top 3 ETF proxy baskets (max 5 tickers each) that replicate UTF's NAV returns.
+   - Optimize for: 90-day rolling correlation target; include 180-day stress correlation; tracking error ≤2%; prefer liquid, low-cost ETFs.
+   - Provide candidate weights, expected turnover, and rationale for each ETF choice.
+
+4. Hedge Simulation:
+   - Simulate a $50M long UTF / short proxy implementation.
+   - Compute hedge ratio, daily P&L distribution, cumulative P&L, max drawdown, realized tracking error, and basis risk (NAV vs market).
+   - Include scenario analysis for 1) sudden distribution cut, 2) 10% market shock to infrastructure sector, 3) 30-day liquidity stress.
+
+5. Implementation Costs:
+   - Estimate transaction costs, bid/ask slippage, and borrow cost for the short leg at $50M notional; provide tiered slippage assumptions.
+   - Provide estimated time-to-execute and market impact for each proxy candidate.
+
+6. Leverage and Derivatives Probe:
+   - Flag signs of undisclosed leverage or derivatives if realized returns cannot be explained by holdings and visible exposures.
+   - If flagged, quantify unexplained return component and list likely instruments.
+
+7. Confidence & Caveats:
+   - Provide a replication confidence score (0-100).
+   - List invalidation risks (e.g., disclosure lag, hidden swaps, large illiquid positions, distribution policy changes).
+
+Deliverables:
+- CSV: reconstructed UTF holdings with proxy weights and liquidity scores.
+- JSON: factor exposures, correlation matrices (90d & 180d), hedge stats, and slippage assumptions.
+- PDF/Markdown: 1-page advisor explainer (narrative, hedge talking points, and a simple visual).
+Inputs required: holdings CSV (source: Cohen & Steers), 2 years daily NAV & market price (source: CEF Connect or Yahoo Finance), distribution history, target notional ($50M).`
+
 export function formatCurrency(value: number): string {
   if (Math.abs(value) >= 1e9) return `$${(value / 1e9).toFixed(1)}B`
   if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(1)}M`

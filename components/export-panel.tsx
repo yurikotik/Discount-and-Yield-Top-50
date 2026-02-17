@@ -14,10 +14,15 @@ import {
   leverageProbe,
   fundOverview,
   concentrationMetrics,
+  inputChecklist,
+  herculesPrompt,
+  slippageTiers,
+  correlationRegimes,
 } from "@/lib/utf-data"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Download, FileText, FileJson, File } from "lucide-react"
+import { Download, FileText, FileJson, File, CheckCircle2, Circle, Copy, Check, ClipboardList, Terminal } from "lucide-react"
 
 function downloadFile(content: string, filename: string, type: string) {
   const blob = new Blob([content], { type })
@@ -67,6 +72,11 @@ function generateJSON(): string {
         basket: b.name,
         correlation: b.correlation180d,
       })),
+      stress: correlationRegimes.map((r) => ({
+        basket: r.basket,
+        stressCorrelation: r.stressCorr,
+        regimeStable: r.regimeStable,
+      })),
     },
     hedgeStatistics: hedgeStats,
     slippageAssumptions: costEstimates.map((c) => ({
@@ -74,6 +84,12 @@ function generateJSON(): string {
       bps: c.bps,
       dollarAmount: c.dollarAmount,
       tier: c.tier,
+    })),
+    tieredSlippage: slippageTiers.map((t) => ({
+      notionalBand: t.notionalBand,
+      bidAskSlippage: t.bidAskSlippage,
+      marketImpact: t.marketImpact,
+      totalSlippage: t.totalSlippage,
     })),
     leverageProbe: {
       flagged: leverageProbe.flagged,
@@ -111,7 +127,7 @@ UTF holds ${concentrationMetrics.totalPositions} positions across ${sectorExposu
 The fund exhibits strong loadings on REIT/Infrastructure Beta (${factorExposures[1].exposure.toFixed(2)}), Dividend Yield (${factorExposures[0].exposure.toFixed(2)}), and Utilities sector exposure (${factorExposures[6].exposure.toFixed(2)}). Duration sensitivity is negative (${factorExposures[2].exposure.toFixed(2)}), indicating the fund benefits from rising rates, which is atypical for infrastructure.
 
 **3. Best Proxy**
-The "Minimum Tracking Error" basket achieves a 90-day correlation of ${proxyBaskets[2].correlation90d.toFixed(3)} with tracking error of ${proxyBaskets[2].trackingError.toFixed(2)}%. It uses a blend of IGF, XLU, AMT, AMLP, and EQIX.
+The "Minimum Tracking Error" basket achieves a 90-day correlation of ${proxyBaskets[2].correlation90d.toFixed(3)} with tracking error of ${proxyBaskets[2].trackingError.toFixed(2)}%. The 180-day stress correlation drops to ${correlationRegimes[2].stressCorr.toFixed(3)}, confirming regime stability. It uses a blend of IGF, XLU, AMT, AMLP, and EQIX.
 
 **4. Hedge Implementation**
 A $50M long UTF / short proxy position yields an expected annualized return of ${hedgeStats.annualizedReturn}% with max drawdown of ${hedgeStats.maxDrawdown}%. Basis risk (market-price) is ${hedgeStats.basisRiskMarket}%, driven primarily by CEF premium/discount volatility.
@@ -119,10 +135,14 @@ A $50M long UTF / short proxy position yields an expected annualized return of $
 **5. Leverage Alert**
 Analysis flags likely undisclosed leverage of approximately ${leverageProbe.leverageEstimate}x, with an unexplained return component of +${leverageProbe.unexplainedReturn}% annualized. This is consistent with structural leverage via borrowing facilities and potential derivative overlays.
 
+**6. Tiered Slippage**
+At $50M notional (the $25M-$50M band), estimated total slippage is 18 bps (8 bps bid-ask + 10 bps market impact). Execution recommendation: VWAP/TWAP algos over 2-3 trading days.
+
 ### Hedge Talking Points
 - UTF offers strong infrastructure exposure but carries CEF-specific risks (premium/discount volatility, leverage, distribution sustainability)
 - The proxy hedge reduces infrastructure market risk while capturing the CEF alpha/premium
 - Key risk: distribution policy changes could cause a significant gap between UTF and the proxy
+- 180-day stress correlation of ${correlationRegimes[2].stressCorr.toFixed(3)} confirms proxy holds up under market stress
 - Replication confidence: **${confidenceScore}/100** (Moderate) - primary concern is disclosure lag and hidden derivatives
 
 ### Replication Confidence: ${confidenceScore}/100
@@ -135,6 +155,7 @@ ${confidenceScore >= 80 ? "High" : confidenceScore >= 60 ? "Moderate" : "Low"} c
 
 export function ExportPanel() {
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const handleDownload = (type: string) => {
     setDownloading(type)
@@ -154,8 +175,15 @@ export function ExportPanel() {
     }, 300)
   }
 
+  const handleCopyPrompt = async () => {
+    await navigator.clipboard.writeText(herculesPrompt)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Download Files */}
       <div className="grid gap-4 md:grid-cols-3">
         <ExportCard
           icon={<FileText className="h-5 w-5 text-success" />}
@@ -168,7 +196,7 @@ export function ExportPanel() {
         <ExportCard
           icon={<FileJson className="h-5 w-5 text-primary" />}
           title="Analysis JSON"
-          description="Factor exposures, correlation matrices (90d & 180d), hedge stats, and slippage assumptions."
+          description="Factor exposures, correlation matrices (90d, 180d, stress), hedge stats, tiered slippage assumptions."
           filename="utf-analysis.json"
           onDownload={() => handleDownload("json")}
           isDownloading={downloading === "json"}
@@ -176,12 +204,79 @@ export function ExportPanel() {
         <ExportCard
           icon={<File className="h-5 w-5 text-warning" />}
           title="Advisor Explainer"
-          description="1-page narrative with hedge talking points, fund snapshot, and key findings."
+          description="1-page narrative with hedge talking points, tiered slippage, and key findings."
           filename="utf-advisor-explainer.md"
           onDownload={() => handleDownload("md")}
           isDownloading={downloading === "md"}
         />
       </div>
+
+      {/* Input Checklist */}
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm text-foreground">Input Checklist</CardTitle>
+          </div>
+          <CardDescription>Required data sources and their status for running the full analysis</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground text-xs w-8">Status</TableHead>
+                <TableHead className="text-muted-foreground text-xs">Input Item</TableHead>
+                <TableHead className="text-muted-foreground text-xs">Source</TableHead>
+                <TableHead className="text-muted-foreground text-xs">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {inputChecklist.map((item) => (
+                <TableRow key={item.item} className="border-border">
+                  <TableCell>
+                    {item.status === "ready" ? (
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs font-medium text-foreground">{item.item}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{item.source}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{item.action}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Hercules Prompt */}
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm text-foreground">Hercules Prompt</CardTitle>
+              <Badge variant="outline" className="text-[10px] border-success/30 text-success">Ready to Paste</Badge>
+            </div>
+            <button
+              onClick={handleCopyPrompt}
+              className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Copy Prompt"}
+            </button>
+          </div>
+          <CardDescription>Finalized UTF analysis prompt for Hercules engine -- paste directly or hand off to an engineer</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border border-border bg-secondary/30 p-4">
+            <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground">
+              {herculesPrompt}
+            </pre>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Preview of the Markdown */}
       <Card className="border-border bg-card">
@@ -197,10 +292,14 @@ export function ExportPanel() {
               in diversified infrastructure assets. Trading at a {Math.abs(fundOverview.premiumDiscount).toFixed(2)}% discount to NAV,
               the fund offers a {fundOverview.distributionRate}% distribution rate with {fundOverview.leverage}% structural leverage.
             </p>
-            <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-5">
               <div>
                 <span className="text-[10px] uppercase text-muted-foreground">Best Proxy Corr</span>
                 <div className="text-sm font-semibold text-foreground">{proxyBaskets[2].correlation90d.toFixed(3)}</div>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase text-muted-foreground">Stress Corr</span>
+                <div className="text-sm font-semibold text-foreground">{correlationRegimes[2].stressCorr.toFixed(3)}</div>
               </div>
               <div>
                 <span className="text-[10px] uppercase text-muted-foreground">Tracking Error</span>

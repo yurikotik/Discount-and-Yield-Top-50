@@ -1,6 +1,6 @@
 "use client"
 
-import { factorExposures, navPriceData } from "@/lib/utf-data"
+import { factorExposures, navPriceData, returnDecomposition } from "@/lib/utf-data"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -27,8 +27,79 @@ export function FactorsSection() {
     contribution: f.contribution,
   }))
 
+  const decompositionBarData = returnDecomposition.map((r) => ({
+    period: r.period,
+    "NAV Return": r.navReturn,
+    "P/D Effect": r.premiumDiscountEffect,
+    Distribution: r.distributionReturn,
+    Leverage: r.leverageEffect,
+  }))
+
   return (
     <div className="flex flex-col gap-6">
+      {/* NAV vs Market Return Decomposition */}
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm text-foreground">NAV vs Market Return Decomposition</CardTitle>
+            <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">NEW</Badge>
+          </div>
+          <CardDescription>Breaking total return into NAV-driven, premium/discount, distribution, and leverage components</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={decompositionBarData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
+                  <XAxis dataKey="period" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                  <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: "oklch(0.16 0.018 250)",
+                      border: "1px solid oklch(0.25 0.02 250)",
+                      borderRadius: "8px",
+                      color: "oklch(0.95 0.01 250)",
+                      fontSize: "12px",
+                    }}
+                    formatter={(value: number) => [`${value.toFixed(1)}%`, ""]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px", color: "oklch(0.60 0.02 250)" }} />
+                  <Bar dataKey="NAV Return" stackId="a" fill="#4a9eff" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="P/D Effect" stackId="a" fill="#34d399" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Distribution" stackId="a" fill="#fbbf24" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Leverage" stackId="a" fill="#f87171" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="text-muted-foreground text-xs">Period</TableHead>
+                  <TableHead className="text-muted-foreground text-xs text-right">Total</TableHead>
+                  <TableHead className="text-muted-foreground text-xs text-right">NAV</TableHead>
+                  <TableHead className="text-muted-foreground text-xs text-right">P/D</TableHead>
+                  <TableHead className="text-muted-foreground text-xs text-right">Dist.</TableHead>
+                  <TableHead className="text-muted-foreground text-xs text-right">Leverage</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {returnDecomposition.map((r) => (
+                  <TableRow key={r.period} className="border-border">
+                    <TableCell className="text-xs font-medium text-foreground">{r.period}</TableCell>
+                    <TableCell className="text-right font-mono text-xs font-semibold text-foreground">{r.totalReturn.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-primary">{r.navReturn.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-success">{r.premiumDiscountEffect > 0 ? "+" : ""}{r.premiumDiscountEffect.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-warning">{r.distributionReturn.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-destructive">{r.leverageEffect.toFixed(1)}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Factor Exposures Chart */}
         <Card className="border-border bg-card">
