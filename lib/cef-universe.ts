@@ -38,6 +38,7 @@ export interface CEFOverview {
   sponsor: string
   strategy: string
   aum: number           // in billions
+  adv: number           // avg daily volume in $ millions
   navPerShare: number
   marketPrice: number
   premiumDiscount: number
@@ -47,6 +48,11 @@ export interface CEFOverview {
   inceptionDate: string
   benchmark: string
   category: "infrastructure" | "fixed-income" | "reit" | "equity" | "multi-asset"
+  // CSV-aligned fields from universe_cef_metrics.csv
+  return90d: number     // 90-day return %
+  holdingsDate: string  // last disclosure date (YYYY-MM-DD)
+  unii: number          // undistributed net investment income per share
+  distributionCoverage: number // ratio: UNII + income / distribution
 }
 
 export interface CEFProfile {
@@ -251,7 +257,7 @@ function generateConfidence(profile: {
 // ─── Fund Profiles ──────────────────────────────────────────────────────────
 
 const utfProfile: CEFProfile = {
-  overview: { ticker: "UTF", name: "Cohen & Steers Infrastructure Fund", sponsor: "Cohen & Steers", strategy: "Global listed infrastructure with leverage", aum: 3.0, navPerShare: 26.42, marketPrice: 24.89, premiumDiscount: -5.79, distributionRate: 7.8, leverageRatio: 22.4, expenseRatio: 2.16, inceptionDate: "Mar 2004", benchmark: "S&P Global Infrastructure Index", category: "infrastructure" },
+  overview: { ticker: "UTF", name: "Cohen & Steers Infrastructure Fund", sponsor: "Cohen & Steers", strategy: "Global listed infrastructure with leverage", aum: 3.0, adv: 8.2, navPerShare: 26.42, marketPrice: 24.89, premiumDiscount: -5.79, distributionRate: 7.8, leverageRatio: 22.4, expenseRatio: 2.16, inceptionDate: "Mar 2004", benchmark: "S&P Global Infrastructure Index", category: "infrastructure", return90d: 3.8, holdingsDate: "2025-12-31", unii: 0.42, distributionCoverage: 1.12 },
   holdings: [
     { name: "NextEra Energy Inc", ticker: "NEE", sector: "Utilities", weight: 6.2, marketValue: 186000000, country: "US" },
     { name: "American Tower Corp", ticker: "AMT", sector: "REITs", weight: 5.8, marketValue: 174000000, country: "US" },
@@ -306,7 +312,7 @@ const utfProfile: CEFProfile = {
 }
 
 const pdiProfile: CEFProfile = {
-  overview: { ticker: "PDI", name: "PIMCO Dynamic Income Fund", sponsor: "PIMCO", strategy: "Multi-sector fixed income with aggressive leverage", aum: 4.8, navPerShare: 18.92, marketPrice: 19.84, premiumDiscount: 4.86, distributionRate: 12.1, leverageRatio: 38.2, expenseRatio: 3.42, inceptionDate: "May 2012", benchmark: "Bloomberg US Aggregate Bond Index", category: "fixed-income" },
+  overview: { ticker: "PDI", name: "PIMCO Dynamic Income Fund", sponsor: "PIMCO", strategy: "Multi-sector fixed income with aggressive leverage", aum: 4.8, adv: 15.4, navPerShare: 18.92, marketPrice: 19.84, premiumDiscount: 4.86, distributionRate: 12.1, leverageRatio: 38.2, expenseRatio: 3.42, inceptionDate: "May 2012", benchmark: "Bloomberg US Aggregate Bond Index", category: "fixed-income", return90d: 2.1, holdingsDate: "2025-12-31", unii: -0.18, distributionCoverage: 0.85 },
   holdings: [
     { name: "US Treasury 2.875% 2032", ticker: "UST", sector: "Government", weight: 8.2, marketValue: 393600000, country: "US" },
     { name: "FNMA 30Y 4.0%", ticker: "FNMA", sector: "Agency MBS", weight: 7.1, marketValue: 340800000, country: "US" },
@@ -361,7 +367,7 @@ const pdiProfile: CEFProfile = {
 }
 
 const rqiProfile: CEFProfile = {
-  overview: { ticker: "RQI", name: "Cohen & Steers Quality Income Realty Fund", sponsor: "Cohen & Steers", strategy: "US REIT income with moderate leverage", aum: 2.1, navPerShare: 13.88, marketPrice: 13.12, premiumDiscount: -5.47, distributionRate: 6.9, leverageRatio: 25.1, expenseRatio: 1.92, inceptionDate: "Feb 2002", benchmark: "FTSE Nareit All Equity REITs Index", category: "reit" },
+  overview: { ticker: "RQI", name: "Cohen & Steers Quality Income Realty Fund", sponsor: "Cohen & Steers", strategy: "US REIT income with moderate leverage", aum: 2.1, adv: 4.6, navPerShare: 13.88, marketPrice: 13.12, premiumDiscount: -5.47, distributionRate: 6.9, leverageRatio: 25.1, expenseRatio: 1.92, inceptionDate: "Feb 2002", benchmark: "FTSE Nareit All Equity REITs Index", category: "reit", return90d: 4.2, holdingsDate: "2025-12-31", unii: 0.28, distributionCoverage: 1.05 },
   holdings: [
     { name: "Prologis Inc", ticker: "PLD", sector: "Industrial REITs", weight: 7.4, marketValue: 155400000, country: "US" },
     { name: "American Tower Corp", ticker: "AMT", sector: "Specialty REITs", weight: 6.8, marketValue: 142800000, country: "US" },
@@ -481,7 +487,7 @@ function buildCEF(seed: FundSeed): CEFProfile {
 }
 
 const ptyProfile = buildCEF({
-  overview: { ticker: "PTY", name: "PIMCO Corporate & Income Opportunity Fund", sponsor: "PIMCO", strategy: "Investment-grade and high-yield corporate bonds with leverage", aum: 3.2, navPerShare: 13.45, marketPrice: 14.62, premiumDiscount: 8.70, distributionRate: 9.8, leverageRatio: 35.6, expenseRatio: 2.85, inceptionDate: "Dec 2002", benchmark: "Bloomberg US Corporate High Yield Index", category: "fixed-income" },
+  overview: { ticker: "PTY", name: "PIMCO Corporate & Income Opportunity Fund", sponsor: "PIMCO", strategy: "Investment-grade and high-yield corporate bonds with leverage", aum: 3.2, adv: 11.8, navPerShare: 13.45, marketPrice: 14.62, premiumDiscount: 8.70, distributionRate: 9.8, leverageRatio: 35.6, expenseRatio: 2.85, inceptionDate: "Dec 2002", benchmark: "Bloomberg US Corporate High Yield Index", category: "fixed-income", return90d: 1.9, holdingsDate: "2025-12-31", unii: -0.08, distributionCoverage: 0.92 },
   sectorWeights: [["Investment Grade", 28.2, "#4a9eff"], ["High Yield", 24.6, "#34d399"], ["Bank Loans", 15.4, "#fbbf24"], ["EM Debt", 12.8, "#f87171"], ["Structured Credit", 10.2, "#a78bfa"], ["Other", 8.8, "#64748b"]],
   factorList: [["Credit Spread", 0.92, 10.8, "high"], ["Duration", 0.58, 5.2, "high"], ["Leverage Factor", 0.72, 6.4, "high"], ["Dividend Yield", 0.85, 8.8, "high"], ["Value", 0.28, 2.2, "medium"], ["Momentum", -0.18, -1.5, "low"], ["EM Currency", 0.22, 1.8, "low"], ["Quality", -0.35, -2.8, "medium"]],
   perf: { return1Y: 10.2, return3Y: 4.8, return5Y: 3.6, returnYTD: 2.8, navReturn1Y: 6.4, priceReturn1Y: 10.2, volatility1Y: 10.8, sharpeRatio: 0.42, maxDrawdown1Y: -7.2, beta: 0.45 },
@@ -490,7 +496,7 @@ const ptyProfile = buildCEF({
 })
 
 const gofProfile = buildCEF({
-  overview: { ticker: "GOF", name: "Guggenheim Strategic Opportunities Fund", sponsor: "Guggenheim", strategy: "Multi-sector credit with options overlay", aum: 2.8, navPerShare: 14.22, marketPrice: 15.88, premiumDiscount: 11.67, distributionRate: 11.4, leverageRatio: 29.3, expenseRatio: 2.65, inceptionDate: "Jul 2007", benchmark: "Bloomberg US Aggregate Bond Index", category: "multi-asset" },
+  overview: { ticker: "GOF", name: "Guggenheim Strategic Opportunities Fund", sponsor: "Guggenheim", strategy: "Multi-sector credit with options overlay", aum: 2.8, adv: 6.9, navPerShare: 14.22, marketPrice: 15.88, premiumDiscount: 11.67, distributionRate: 11.4, leverageRatio: 29.3, expenseRatio: 2.65, inceptionDate: "Jul 2007", benchmark: "Bloomberg US Aggregate Bond Index", category: "multi-asset", return90d: 1.5, holdingsDate: "2025-11-30", unii: -0.32, distributionCoverage: 0.74 },
   sectorWeights: [["CLO/ABS", 22.8, "#4a9eff"], ["High Yield", 21.4, "#34d399"], ["Bank Loans", 18.2, "#fbbf24"], ["Investment Grade", 14.6, "#f87171"], ["Agency MBS", 12.4, "#a78bfa"], ["Other", 10.6, "#64748b"]],
   factorList: [["Credit Spread", 0.88, 9.4, "high"], ["Leverage Factor", 0.65, 5.8, "high"], ["Dividend Yield", 0.90, 10.2, "high"], ["Duration", 0.42, 3.6, "medium"], ["Momentum", -0.28, -2.2, "medium"], ["Value", 0.18, 1.4, "low"], ["Volatility", 0.35, 2.8, "medium"], ["Quality", -0.42, -3.4, "high"]],
   perf: { return1Y: 9.8, return3Y: 4.2, return5Y: 3.8, returnYTD: 2.4, navReturn1Y: 5.8, priceReturn1Y: 9.8, volatility1Y: 12.4, sharpeRatio: 0.35, maxDrawdown1Y: -8.8, beta: 0.48 },
@@ -499,7 +505,7 @@ const gofProfile = buildCEF({
 })
 
 const eosProfile = buildCEF({
-  overview: { ticker: "EOS", name: "Eaton Vance Enhanced Equity Income Fund II", sponsor: "Eaton Vance (Morgan Stanley)", strategy: "Large cap equity with options overwriting", aum: 1.6, navPerShare: 19.74, marketPrice: 18.42, premiumDiscount: -6.69, distributionRate: 7.2, leverageRatio: 0, expenseRatio: 1.08, inceptionDate: "Dec 2004", benchmark: "S&P 500 Index", category: "equity" },
+  overview: { ticker: "EOS", name: "Eaton Vance Enhanced Equity Income Fund II", sponsor: "Eaton Vance (Morgan Stanley)", strategy: "Large cap equity with options overwriting", aum: 1.6, adv: 3.8, navPerShare: 19.74, marketPrice: 18.42, premiumDiscount: -6.69, distributionRate: 7.2, leverageRatio: 0, expenseRatio: 1.08, inceptionDate: "Dec 2004", benchmark: "S&P 500 Index", category: "equity", return90d: 5.1, holdingsDate: "2025-12-31", unii: 0.18, distributionCoverage: 1.22 },
   sectorWeights: [["Technology", 28.4, "#4a9eff"], ["Healthcare", 14.8, "#34d399"], ["Financials", 13.2, "#fbbf24"], ["Consumer Discretionary", 10.6, "#f87171"], ["Industrials", 9.8, "#a78bfa"], ["Other", 23.2, "#64748b"]],
   factorList: [["Market Beta", 0.82, 12.4, "high"], ["Dividend Yield", 0.45, 3.8, "medium"], ["Quality", 0.65, 5.6, "high"], ["Momentum", 0.38, 3.2, "medium"], ["Volatility", -0.42, -3.6, "high"], ["Options Overlay", -0.55, -4.8, "high"], ["Value", 0.22, 1.8, "low"], ["Size", -0.12, -1.0, "low"]],
   perf: { return1Y: 18.4, return3Y: 10.2, return5Y: 9.8, returnYTD: 5.2, navReturn1Y: 16.8, priceReturn1Y: 18.4, volatility1Y: 13.2, sharpeRatio: 0.98, maxDrawdown1Y: -7.2, beta: 0.82 },
@@ -508,7 +514,7 @@ const eosProfile = buildCEF({
 })
 
 const stkProfile = buildCEF({
-  overview: { ticker: "STK", name: "Columbia Seligman Premium Technology Growth Fund", sponsor: "Columbia Threadneedle", strategy: "Technology equity with options overwriting", aum: 0.8, navPerShare: 32.15, marketPrice: 30.88, premiumDiscount: -3.95, distributionRate: 8.5, leverageRatio: 0, expenseRatio: 1.15, inceptionDate: "Nov 2009", benchmark: "S&P North American Technology Sector Index", category: "equity" },
+  overview: { ticker: "STK", name: "Columbia Seligman Premium Technology Growth Fund", sponsor: "Columbia Threadneedle", strategy: "Technology equity with options overwriting", aum: 0.8, adv: 2.1, navPerShare: 32.15, marketPrice: 30.88, premiumDiscount: -3.95, distributionRate: 8.5, leverageRatio: 0, expenseRatio: 1.15, inceptionDate: "Nov 2009", benchmark: "S&P North American Technology Sector Index", category: "equity", return90d: 6.8, holdingsDate: "2025-12-31", unii: 0.10, distributionCoverage: 1.08 },
   sectorWeights: [["Software", 32.2, "#4a9eff"], ["Semiconductors", 24.8, "#34d399"], ["Internet/Media", 18.4, "#fbbf24"], ["IT Services", 12.6, "#f87171"], ["Hardware", 8.2, "#a78bfa"], ["Other", 3.8, "#64748b"]],
   factorList: [["Market Beta", 1.12, 14.8, "high"], ["Momentum", 0.68, 5.8, "high"], ["Growth", 0.82, 7.4, "high"], ["Volatility", -0.38, -3.2, "medium"], ["Options Overlay", -0.48, -4.2, "high"], ["Quality", 0.52, 4.4, "high"], ["Size", -0.28, -2.2, "medium"], ["Value", -0.42, -3.5, "high"]],
   perf: { return1Y: 22.8, return3Y: 14.6, return5Y: 15.2, returnYTD: 6.8, navReturn1Y: 21.2, priceReturn1Y: 22.8, volatility1Y: 18.4, sharpeRatio: 0.92, maxDrawdown1Y: -12.4, beta: 1.12 },
@@ -517,7 +523,7 @@ const stkProfile = buildCEF({
 })
 
 const usaProfile = buildCEF({
-  overview: { ticker: "USA", name: "Liberty All-Star Equity Fund", sponsor: "ALPS Advisors", strategy: "Diversified equity with multi-manager approach", aum: 1.4, navPerShare: 7.12, marketPrice: 6.68, premiumDiscount: -6.18, distributionRate: 9.1, leverageRatio: 0, expenseRatio: 0.94, inceptionDate: "Oct 1986", benchmark: "S&P 500 Index", category: "equity" },
+  overview: { ticker: "USA", name: "Liberty All-Star Equity Fund", sponsor: "ALPS Advisors", strategy: "Diversified equity with multi-manager approach", aum: 1.4, adv: 3.2, navPerShare: 7.12, marketPrice: 6.68, premiumDiscount: -6.18, distributionRate: 9.1, leverageRatio: 0, expenseRatio: 0.94, inceptionDate: "Oct 1986", benchmark: "S&P 500 Index", category: "equity", return90d: 4.7, holdingsDate: "2025-12-31", unii: 0.06, distributionCoverage: 1.15 },
   sectorWeights: [["Technology", 24.8, "#4a9eff"], ["Healthcare", 16.2, "#34d399"], ["Financials", 14.8, "#fbbf24"], ["Consumer Discretionary", 11.4, "#f87171"], ["Industrials", 10.2, "#a78bfa"], ["Other", 22.6, "#64748b"]],
   factorList: [["Market Beta", 0.98, 16.2, "high"], ["Value", 0.35, 2.8, "medium"], ["Quality", 0.48, 4.0, "medium"], ["Momentum", 0.28, 2.2, "medium"], ["Size", 0.12, 1.0, "low"], ["Dividend Yield", 0.42, 3.5, "medium"], ["Growth", 0.32, 2.6, "medium"], ["Volatility", -0.08, -0.7, "low"]],
   perf: { return1Y: 16.2, return3Y: 9.8, return5Y: 10.4, returnYTD: 4.8, navReturn1Y: 15.4, priceReturn1Y: 16.2, volatility1Y: 14.2, sharpeRatio: 0.82, maxDrawdown1Y: -8.8, beta: 0.98 },
@@ -526,7 +532,7 @@ const usaProfile = buildCEF({
 })
 
 const utgProfile = buildCEF({
-  overview: { ticker: "UTG", name: "Reaves Utility Income Fund", sponsor: "Reaves Asset Management", strategy: "Utility and telecom equity with moderate leverage", aum: 2.3, navPerShare: 30.85, marketPrice: 29.42, premiumDiscount: -4.63, distributionRate: 6.5, leverageRatio: 20.8, expenseRatio: 2.02, inceptionDate: "Feb 2004", benchmark: "S&P 500 Utilities Index", category: "infrastructure" },
+  overview: { ticker: "UTG", name: "Reaves Utility Income Fund", sponsor: "Reaves Asset Management", strategy: "Utility and telecom equity with moderate leverage", aum: 2.3, adv: 5.1, navPerShare: 30.85, marketPrice: 29.42, premiumDiscount: -4.63, distributionRate: 6.5, leverageRatio: 20.8, expenseRatio: 2.02, inceptionDate: "Feb 2004", benchmark: "S&P 500 Utilities Index", category: "infrastructure", return90d: 3.4, holdingsDate: "2025-12-31", unii: 0.35, distributionCoverage: 1.18 },
   sectorWeights: [["Electric Utilities", 34.2, "#4a9eff"], ["Multi-Utilities", 18.6, "#34d399"], ["Telecom", 14.8, "#fbbf24"], ["Water Utilities", 8.4, "#f87171"], ["Gas Utilities", 7.2, "#a78bfa"], ["Other", 16.8, "#64748b"]],
   factorList: [["Dividend Yield", 0.85, 8.8, "high"], ["Interest Rate Sensitivity", -0.78, -7.2, "high"], ["Utility Beta", 0.92, 12.8, "high"], ["Value", 0.42, 3.4, "medium"], ["Quality", 0.55, 4.6, "high"], ["Momentum", 0.08, 0.7, "low"], ["Leverage Factor", 0.35, 2.8, "medium"], ["Volatility", -0.22, -1.8, "low"]],
   perf: { return1Y: 12.4, return3Y: 6.8, return5Y: 7.2, returnYTD: 3.4, navReturn1Y: 9.6, priceReturn1Y: 12.4, volatility1Y: 13.8, sharpeRatio: 0.64, maxDrawdown1Y: -7.8, beta: 0.72 },
@@ -535,7 +541,7 @@ const utgProfile = buildCEF({
 })
 
 const dnpProfile = buildCEF({
-  overview: { ticker: "DNP", name: "DNP Select Income Fund", sponsor: "Duff & Phelps", strategy: "Utility and energy income with leverage", aum: 3.5, navPerShare: 9.18, marketPrice: 9.95, premiumDiscount: 8.39, distributionRate: 7.1, leverageRatio: 28.4, expenseRatio: 2.18, inceptionDate: "Jan 1987", benchmark: "S&P 500 Utilities Index", category: "infrastructure" },
+  overview: { ticker: "DNP", name: "DNP Select Income Fund", sponsor: "Duff & Phelps", strategy: "Utility and energy income with leverage", aum: 3.5, adv: 7.4, navPerShare: 9.18, marketPrice: 9.95, premiumDiscount: 8.39, distributionRate: 7.1, leverageRatio: 28.4, expenseRatio: 2.18, inceptionDate: "Jan 1987", benchmark: "S&P 500 Utilities Index", category: "infrastructure", return90d: 2.8, holdingsDate: "2025-12-31", unii: 0.15, distributionCoverage: 0.98 },
   sectorWeights: [["Electric Utilities", 30.8, "#4a9eff"], ["Energy Infrastructure", 22.4, "#34d399"], ["Gas Utilities", 12.6, "#fbbf24"], ["Multi-Utilities", 11.8, "#f87171"], ["Telecom", 8.4, "#a78bfa"], ["Other", 14.0, "#64748b"]],
   factorList: [["Dividend Yield", 0.88, 9.2, "high"], ["Interest Rate Sensitivity", -0.72, -6.8, "high"], ["Energy Beta", 0.48, 4.0, "medium"], ["Utility Beta", 0.82, 8.4, "high"], ["Leverage Factor", 0.52, 4.4, "high"], ["Value", 0.38, 3.0, "medium"], ["Momentum", 0.14, 1.2, "low"], ["Quality", 0.32, 2.6, "medium"]],
   perf: { return1Y: 11.2, return3Y: 5.8, return5Y: 5.4, returnYTD: 3.1, navReturn1Y: 7.8, priceReturn1Y: 11.2, volatility1Y: 13.2, sharpeRatio: 0.52, maxDrawdown1Y: -8.2, beta: 0.68 },
@@ -580,94 +586,104 @@ export const cefByTicker: Record<string, CEFProfile> = Object.fromEntries(
 export const TOP10_TICKERS = cefUniverse.map(p => p.overview.ticker)
 
 // ─── Z-Score / PSI Ranking Engine ───────────────────────────────────────────
+// Aligned to compute_psi.py canonical implementation
 
+/**
+ * Step 1: Filter universe (Python: AUM>500M, ADV>500K, yield>5%, holdings<90d)
+ */
+function applyFilters(p: CEFProfile): { passes: boolean; reasons: string[] } {
+  const reasons: string[] = []
+  if (p.overview.aum < 0.5) reasons.push(`AUM $${p.overview.aum}B < $0.5B threshold`)
+  if (p.overview.adv < 0.5) reasons.push(`ADV $${p.overview.adv}M < $0.5M threshold`)
+  if (p.overview.distributionRate < 5) reasons.push(`Yield ${p.overview.distributionRate}% < 5% threshold`)
+  // holdings staleness check (90 day max)
+  const holdDate = new Date(p.overview.holdingsDate)
+  const daysSince = Math.floor((Date.now() - holdDate.getTime()) / 86400000)
+  if (daysSince > 90) reasons.push(`Holdings ${daysSince}d stale (>90d)`)
+  return { passes: reasons.length === 0, reasons }
+}
+
+/**
+ * Step 2a: Extract the 4 raw metrics matching CSV columns
+ */
 function extractMetrics(p: CEFProfile): FundMetricVector {
   return {
-    yield: p.overview.distributionRate,
-    discount: -p.overview.premiumDiscount, // negative P/D is good (buying at discount)
-    volatility: -p.performance.volatility1Y, // lower vol is better
-    leverage: -p.overview.leverageRatio, // lower leverage is better
-    navReturn1Y: p.performance.navReturn1Y,
-    expenseRatio: -p.overview.expenseRatio, // lower cost is better
-    drawdown: p.performance.maxDrawdown1Y, // less negative is better (already negative)
-    aumLiquidity: Math.log10(p.overview.aum * 1e9), // log-scale AUM as liquidity proxy
+    yield: p.overview.distributionRate / 100,     // as decimal to match CSV
+    avgPremiumDiscount: p.overview.premiumDiscount / 100,
+    realizedVol: p.performance.volatility1Y / 100,
+    return1Y: p.performance.return1Y / 100,
   }
 }
 
+/**
+ * Step 2b: zscore(M_i) = (M_i - mean) / std across universe
+ * Step 3: composite_z = mean([z_yield, z_premium, z_vol, z_return])  (equal weight)
+ */
 function computeZScores(profiles: CEFProfile[]): { zScores: ZScoreVector[]; metrics: FundMetricVector[] } {
   const metrics = profiles.map(extractMetrics)
-  const keys = Object.keys(metrics[0]) as (keyof FundMetricVector)[]
-  const means: Record<string, number> = {}
-  const stds: Record<string, number> = {}
 
-  for (const k of keys) {
-    const vals = metrics.map(m => m[k])
+  function zscoreArray(vals: number[]): number[] {
     const mean = vals.reduce((a, b) => a + b, 0) / vals.length
-    const variance = vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length
-    means[k] = mean
-    stds[k] = Math.sqrt(variance) || 1
+    const std = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length) || 1
+    return vals.map(v => (v - mean) / std)
   }
 
-  // Weights for composite Z: yield and navReturn weighted higher
-  const weights: Record<string, number> = {
-    yield: 1.5,
-    discount: 1.3,
-    volatility: 0.8,
-    leverage: 0.7,
-    navReturn1Y: 1.4,
-    expenseRatio: 0.6,
-    drawdown: 0.9,
-    aumLiquidity: 0.5,
-  }
+  const zYields = zscoreArray(metrics.map(m => m.yield))
+  const zPremiums = zscoreArray(metrics.map(m => m.avgPremiumDiscount))
+  const zVols = zscoreArray(metrics.map(m => m.realizedVol))
+  const zReturns = zscoreArray(metrics.map(m => m.return1Y))
 
-  const zScores: ZScoreVector[] = metrics.map(m => {
-    const z: Record<string, number> = {}
-    let weightedSum = 0
-    let totalWeight = 0
-    for (const k of keys) {
-      z[k] = (m[k] - means[k]) / stds[k]
-      weightedSum += z[k] * (weights[k] ?? 1)
-      totalWeight += (weights[k] ?? 1)
+  const zScores: ZScoreVector[] = metrics.map((_, i) => {
+    const zY = zYields[i]
+    const zP = zPremiums[i]
+    const zV = zVols[i]
+    const zR = zReturns[i]
+    return {
+      zYield: parseFloat(zY.toFixed(4)),
+      zPremium: parseFloat(zP.toFixed(4)),
+      zVol: parseFloat(zV.toFixed(4)),
+      zReturn: parseFloat(zR.toFixed(4)),
+      compositeZ: parseFloat(((zY + zP + zV + zR) / 4).toFixed(4)),
     }
-    return { ...z, composite: weightedSum / totalWeight } as ZScoreVector
   })
 
   return { zScores, metrics }
 }
 
 /**
- * Population Stability Index (PSI) - compare 90-day recent window vs prior 365-day baseline.
+ * Step 4: PSI - compare recent 90d window vs prior 365d baseline
+ * Uses NAV return distribution bins, matching scipy qcut logic in Python.
  * PSI < 0.1 = stable, 0.1-0.25 = shifting, > 0.25 = unstable
- * We approximate using NAV return volatility and premium/discount regime shift.
  */
 function computePSI(profile: CEFProfile): PSIResult {
   const navHist = profile.navHistory
   if (navHist.length < 6) return { psi: 0, significantBins: 0, totalBins: 10, regime: "stable" }
 
-  // Split into "baseline" (first 75%) and "recent" (last 25%)
+  // Split: baseline = first 75%, recent = last 25% (approximates 365d vs 90d)
   const splitIdx = Math.floor(navHist.length * 0.75)
   const baseline = navHist.slice(0, splitIdx)
   const recent = navHist.slice(splitIdx)
 
-  // Compute NAV returns for each window
-  const baseReturns = baseline.slice(1).map((v, i) => (v.nav - baseline[i].nav) / baseline[i].nav)
-  const recentReturns = recent.slice(1).map((v, i) => (v.nav - recent[i].nav) / recent[i].nav)
+  const navReturns = (arr: NAVPricePoint[]) => arr.slice(1).map((v, i) => (v.nav - arr[i].nav) / arr[i].nav)
+  const baseReturns = navReturns(baseline)
+  const recentReturns = navReturns(recent)
 
-  // Simple binned PSI: divide return range into bins, compare distributions
+  // Binned PSI (10 bins)
   const numBins = 10
   const allReturns = [...baseReturns, ...recentReturns]
   const minR = Math.min(...allReturns, -0.05)
   const maxR = Math.max(...allReturns, 0.05)
   const binWidth = (maxR - minR) / numBins
+  const eps = 1e-8 // avoid log(0), matching Python's replace(0, 1e-8)
 
   let psi = 0
   let significantBins = 0
   for (let b = 0; b < numBins; b++) {
     const lo = minR + b * binWidth
     const hi = lo + binWidth
-    const pBase = (baseReturns.filter(r => r >= lo && r < hi).length + 0.001) / baseReturns.length
-    const pRecent = (recentReturns.filter(r => r >= lo && r < hi).length + 0.001) / recentReturns.length
-    const binPsi = (pRecent - pBase) * Math.log(pRecent / pBase)
+    const basePct = Math.max(eps, baseReturns.filter(r => r >= lo && r < hi).length / baseReturns.length)
+    const recentPct = Math.max(eps, recentReturns.filter(r => r >= lo && r < hi).length / recentReturns.length)
+    const binPsi = (basePct - recentPct) * Math.log(basePct / recentPct)
     psi += binPsi
     if (Math.abs(binPsi) > 0.02) significantBins++
   }
@@ -678,43 +694,48 @@ function computePSI(profile: CEFProfile): PSIResult {
 }
 
 /**
- * Final ranking: Score_i = compositeZ_rank - lambda * PSI_rank
- * Higher score = better. Lambda controls penalty for regime instability.
+ * Steps 5-6: Normalize and score
+ *   z_norm = (composite_z - min) / (max - min)
+ *   psi_norm = (PSI - min) / (max - min)
+ *   score = 0.7 * z_norm + 0.3 * (1 - psi_norm)
+ * Sort descending, pick Top 10
  */
-export function computeRankings(profiles: CEFProfile[], lambda: number = 0.3): FundRanking[] {
-  const { zScores } = computeZScores(profiles)
+export function computeRankings(profiles: CEFProfile[]): FundRanking[] {
+  const { zScores, metrics } = computeZScores(profiles)
   const psiResults = profiles.map(computePSI)
+  const filters = profiles.map(applyFilters)
 
-  // Rank by composite Z (higher is better)
-  const zRanked = zScores
-    .map((z, i) => ({ i, z: z.composite }))
-    .sort((a, b) => b.z - a.z)
-    .map((item, rank) => ({ ...item, zRank: rank + 1 }))
+  const composites = zScores.map(z => z.compositeZ)
+  const psis = psiResults.map(p => p.psi)
 
-  // Rank by PSI (lower is better = more stable)
-  const psiRanked = psiResults
-    .map((p, i) => ({ i, psi: p.psi }))
-    .sort((a, b) => a.psi - b.psi)
-    .map((item, rank) => ({ ...item, psiRank: rank + 1 }))
+  // Min-max normalization
+  const zMin = Math.min(...composites)
+  const zMax = Math.max(...composites)
+  const zRange = (zMax - zMin) || 1
+  const psiMin = Math.min(...psis)
+  const psiMax = Math.max(...psis)
+  const psiRange = (psiMax - psiMin) || 1
 
-  // Combine: Score = (N+1 - zRank) - lambda * psiRank
-  const N = profiles.length
   const rankings: FundRanking[] = profiles.map((p, i) => {
-    const zEntry = zRanked.find(e => e.i === i)!
-    const psiEntry = psiRanked.find(e => e.i === i)!
-    const finalScore = (N + 1 - zEntry.zRank) - lambda * psiEntry.psiRank
+    const zNorm = (composites[i] - zMin) / zRange
+    const psiNorm = (psis[i] - psiMin) / psiRange
+    const score = 0.7 * zNorm + 0.3 * (1 - psiNorm)
     return {
       ticker: p.overview.ticker,
-      compositeZ: parseFloat(zScores[i].composite.toFixed(3)),
-      psiScore: psiResults[i].psi,
-      finalScore: parseFloat(finalScore.toFixed(2)),
-      rank: 0, // will be set after sort
+      metrics: metrics[i],
       zScores: zScores[i],
+      compositeZ: composites[i],
+      zNorm: parseFloat(zNorm.toFixed(4)),
       psiResult: psiResults[i],
+      psiNorm: parseFloat(psiNorm.toFixed(4)),
+      score: parseFloat(score.toFixed(4)),
+      rank: 0,
+      passesFilter: filters[i].passes,
+      filterReasons: filters[i].reasons,
     }
   })
 
-  rankings.sort((a, b) => b.finalScore - a.finalScore)
+  rankings.sort((a, b) => b.score - a.score)
   rankings.forEach((r, i) => { r.rank = i + 1 })
   return rankings
 }

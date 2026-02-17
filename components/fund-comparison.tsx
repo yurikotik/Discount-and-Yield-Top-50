@@ -224,16 +224,17 @@ export function FundComparison({ funds, rankings, onNavigateToFund }: Props) {
                 <TableHead className="text-muted-foreground text-xs">Ticker</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Sponsor</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">AUM</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">ADV</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">P/D</TableHead>
-                <TableHead className="text-muted-foreground text-xs text-right">Dist</TableHead>
-                <TableHead className="text-muted-foreground text-xs text-right">Lev</TableHead>
-                <TableHead className="text-muted-foreground text-xs text-right">Expense</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Yield</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Vol</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">1Y Ret</TableHead>
-                <TableHead className="text-muted-foreground text-xs text-right">Vol 1Y</TableHead>
-                <TableHead className="text-muted-foreground text-xs text-right">Sharpe</TableHead>
-                <TableHead className="text-muted-foreground text-xs text-right">MaxDD</TableHead>
-                <TableHead className="text-muted-foreground text-xs text-right">Z-Score</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">90d Ret</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">UNII</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Dist Cov</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Z</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">PSI</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Score</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -247,22 +248,27 @@ export function FundComparison({ funds, rankings, onNavigateToFund }: Props) {
                     className="border-border cursor-pointer transition-colors hover:bg-primary/5"
                     onClick={() => onNavigateToFund(o.ticker)}
                   >
-                    <TableCell className="font-mono text-xs font-bold text-muted-foreground">#{rank.rank}</TableCell>
+                    <TableCell className="font-mono text-xs font-bold text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        #{rank.rank}
+                        {!rank.passesFilter && <span className="text-[8px] text-warning" title={rank.filterReasons.join("; ")}>!</span>}
+                      </div>
+                    </TableCell>
                     <TableCell className="font-mono text-xs font-bold text-primary">{o.ticker}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{o.sponsor}</TableCell>
                     <TableCell className="text-right font-mono text-xs text-foreground">${o.aum.toFixed(1)}B</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-foreground">${o.adv.toFixed(1)}M</TableCell>
                     <TableCell className="text-right">
                       <span className={`font-mono text-xs ${o.premiumDiscount >= 0 ? "text-success" : "text-destructive"}`}>
                         {o.premiumDiscount >= 0 ? "+" : ""}{o.premiumDiscount.toFixed(1)}%
                       </span>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs text-foreground">{o.distributionRate}%</TableCell>
-                    <TableCell className="text-right font-mono text-xs text-foreground">{o.leverageRatio > 0 ? `${o.leverageRatio}%` : "-"}</TableCell>
-                    <TableCell className="text-right font-mono text-xs text-foreground">{o.expenseRatio.toFixed(2)}%</TableCell>
-                    <TableCell className="text-right font-mono text-xs text-foreground">{p.return1Y.toFixed(1)}%</TableCell>
                     <TableCell className="text-right font-mono text-xs text-foreground">{p.volatility1Y.toFixed(1)}%</TableCell>
-                    <TableCell className="text-right font-mono text-xs text-foreground">{p.sharpeRatio.toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-mono text-xs text-destructive">{p.maxDrawdown1Y.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-foreground">{p.return1Y.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-foreground">{o.return90d.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-foreground">${o.unii.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-foreground">{o.distributionCoverage.toFixed(2)}x</TableCell>
                     <TableCell className="text-right">
                       <Badge variant="outline" className={`font-mono text-[10px] ${rank.compositeZ >= 0 ? "text-success border-success/30" : "text-destructive border-destructive/30"}`}>
                         {rank.compositeZ >= 0 ? "+" : ""}{rank.compositeZ.toFixed(2)}
@@ -272,6 +278,9 @@ export function FundComparison({ funds, rankings, onNavigateToFund }: Props) {
                       <Badge variant="outline" className={`font-mono text-[10px] ${rank.psiResult.regime === "stable" ? "text-success border-success/30" : rank.psiResult.regime === "shifting" ? "text-warning border-warning/30" : "text-destructive border-destructive/30"}`}>
                         {rank.psiResult.psi.toFixed(3)}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-mono text-xs font-bold text-primary">{rank.score.toFixed(3)}</span>
                     </TableCell>
                   </TableRow>
                 )

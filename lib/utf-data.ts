@@ -74,27 +74,20 @@ export interface RiskMetrics {
 
 // ─── Z-Score / PSI Ranking Types ────────────────────────────────────────────
 
+// Matches universe_cef_metrics.csv columns used in compute_psi.py
 export interface FundMetricVector {
-  yield: number
-  discount: number
-  volatility: number
-  leverage: number
-  navReturn1Y: number
-  expenseRatio: number
-  drawdown: number
-  aumLiquidity: number
+  yield: number               // distribution yield
+  avgPremiumDiscount: number  // avg_premium_discount
+  realizedVol: number         // realized_vol (1Y)
+  return1Y: number            // 1y_return
 }
 
 export interface ZScoreVector {
-  yield: number
-  discount: number
-  volatility: number
-  leverage: number
-  navReturn1Y: number
-  expenseRatio: number
-  drawdown: number
-  aumLiquidity: number
-  composite: number
+  zYield: number
+  zPremium: number
+  zVol: number
+  zReturn: number
+  compositeZ: number          // mean([zYield, zPremium, zVol, zReturn])
 }
 
 export interface PSIResult {
@@ -106,12 +99,17 @@ export interface PSIResult {
 
 export interface FundRanking {
   ticker: string
-  compositeZ: number
-  psiScore: number
-  finalScore: number
-  rank: number
+  metrics: FundMetricVector
   zScores: ZScoreVector
+  compositeZ: number     // raw composite z (mean of 4)
+  zNorm: number          // min-max normalized composite z [0,1]
   psiResult: PSIResult
+  psiNorm: number        // min-max normalized PSI [0,1]
+  score: number          // 0.7 * zNorm + 0.3 * (1 - psiNorm)
+  rank: number
+  // Filter status
+  passesFilter: boolean
+  filterReasons: string[]
 }
 
 // ─── Leverage & Derivatives Probe Types ─────────────────────────────────────

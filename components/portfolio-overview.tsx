@@ -40,7 +40,7 @@ export function PortfolioOverview({ funds, rankings, selectedTicker, onSelectFun
   // Ranking bar chart data
   const rankBarData = rankings.map(r => ({
     ticker: r.ticker,
-    score: r.finalScore,
+    score: r.score,
     compositeZ: r.compositeZ,
   }))
 
@@ -199,6 +199,7 @@ export function PortfolioOverview({ funds, rankings, selectedTicker, onSelectFun
                 <TableHead className="text-muted-foreground text-xs text-right">1Y Ret</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">Sharpe</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">Z-Score</TableHead>
+                <TableHead className="text-muted-foreground text-xs text-right">Score</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -230,6 +231,7 @@ export function PortfolioOverview({ funds, rankings, selectedTicker, onSelectFun
                         {rank.compositeZ >= 0 ? "+" : ""}{rank.compositeZ.toFixed(2)}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-right font-mono text-xs font-bold text-primary">{rank.score.toFixed(3)}</TableCell>
                   </TableRow>
                 )
               })}
