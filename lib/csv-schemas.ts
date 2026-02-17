@@ -209,7 +209,7 @@ export function isBarchartFormat(csv: string): boolean {
  * The caller can merge enrichment data afterward.
  */
 export function normalizeBarchartToUniverse(barchartCsv: string): string {
-  const { headers, rows, delimiter } = splitCsvLines(barchartCsv)
+  const { headers, rows } = splitCsvLines(barchartCsv)
   const lowerHeaders = headers.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ""))
 
   const symbolIdx = lowerHeaders.indexOf("symbol")
