@@ -1,6 +1,6 @@
-// ─── Top 10 CEF Universe Data Layer ─────────────────────────────────────────
-// Clean analytics-only data for 10 closed-end funds.
-// Includes Z-score/PSI ranking engine per user spec.
+// ─── CEF Universe Data Layer ────────────────────────────────────────────────
+// 50 closed-end funds: 10 detailed profiles + 40 from Barchart CSV (2026-02-13).
+// Includes 5-pillar scoring engine and PSI ranking per spec.
 
 import {
   type Holding,
@@ -120,11 +120,18 @@ function generateDistributions(rate: number, price: number, months: number = 24)
   return records
 }
 
+// ─── Seeded PRNG (deterministic across server/client to prevent hydration mismatch)
+let _seed = 42
+function seededRandom(): number {
+  _seed = (_seed * 16807 + 0) % 2147483647
+  return (_seed - 1) / 2147483646
+}
+
 // ─── X-Ray Data Generators ─────────────────────────────────────────────────
 
 function generateLeverageProbe(leverageRatio: number, leverageType: string): LeverageProbe {
   const hasDerivatives = leverageType.includes("TRS") || leverageType.includes("swap") || leverageType.includes("CDS") || leverageType.includes("option")
-  const baseResidual = leverageRatio > 25 ? 0.8 + Math.random() * 1.2 : 0.2 + Math.random() * 0.6
+  const baseResidual = leverageRatio > 25 ? 0.8 + seededRandom() * 1.2 : 0.2 + seededRandom() * 0.6
   const residual = hasDerivatives ? baseResidual * 1.4 : baseResidual
   const flagged = residual > 1.0
 
@@ -137,7 +144,7 @@ function generateLeverageProbe(leverageRatio: number, leverageType: string): Lev
   if (leverageType.includes("facility")) instruments.push("Credit Facility")
   if (instruments.length === 0) instruments.push("None detected")
 
-  const impliedNotional = hasDerivatives ? Math.round(leverageRatio * 8 + Math.random() * 100) : 0
+  const impliedNotional = hasDerivatives ? Math.round(leverageRatio * 8 + seededRandom() * 100) : 0
 
   return {
     realizedVsReconstructed: parseFloat(residual.toFixed(2)),
@@ -155,8 +162,8 @@ function generateLeverageProbe(leverageRatio: number, leverageType: string): Lev
 
 function generateDriftRegime(navHistory: NAVPricePoint[], factors: FactorExposure[]): DriftRegimeData {
   const driftTimeSeries: DriftMetric[] = navHistory.map((h, i) => {
-    const base30 = 0.02 + Math.sin(i * 0.4) * 0.015 + Math.random() * 0.01
-    const base90 = 0.015 + Math.sin(i * 0.2) * 0.01 + Math.random() * 0.008
+    const base30 = 0.02 + Math.sin(i * 0.4) * 0.015 + seededRandom() * 0.01
+    const base90 = 0.015 + Math.sin(i * 0.2) * 0.01 + seededRandom() * 0.008
     return {
       date: h.date,
       rolling30d: parseFloat(base30.toFixed(4)),
@@ -179,8 +186,8 @@ function generateDriftRegime(navHistory: NAVPricePoint[], factors: FactorExposur
 function generateLiquidityData(holdings: Holding[], aum: number): LiquidityData {
   const holdingLiquidity: HoldingLiquidity[] = holdings.map(h => {
     const isLargeCap = h.marketValue > 100000000
-    const advProxy = isLargeCap ? 50 + Math.random() * 200 : 5 + Math.random() * 40
-    const marketCap = h.marketValue / (h.weight / 100) / 1e9 * (3 + Math.random() * 10)
+    const advProxy = isLargeCap ? 50 + seededRandom() * 200 : 5 + seededRandom() * 40
+    const marketCap = h.marketValue / (h.weight / 100) / 1e9 * (3 + seededRandom() * 10)
     const score = Math.min(100, Math.round(Math.log10(advProxy + 1) * 30 + (marketCap > 10 ? 20 : marketCap > 1 ? 10 : 0)))
     const daysToLiq = Math.max(1, Math.round(h.marketValue / (advProxy * 1e6 * 0.2)))
     return {
@@ -222,10 +229,10 @@ function generateConfidence(profile: {
   if (leverageType.includes("TRS") || leverageType.includes("swap")) quality -= 8
   if (distributionRate > 10) quality -= 5
   if (caveats.length > 3) quality -= 3
-  quality = Math.max(20, Math.min(100, quality + Math.round(Math.random() * 6 - 3)))
+  quality = Math.max(20, Math.min(100, quality + Math.round(seededRandom() * 6 - 3)))
 
-  const holdingsAge = 45 + Math.round(Math.random() * 30) // 45-75 days
-  const dataCompleteness = leverageType.includes("None") ? 92 : 75 + Math.round(Math.random() * 15)
+  const holdingsAge = 45 + Math.round(seededRandom() * 30) // 45-75 days
+  const dataCompleteness = leverageType.includes("None") ? 92 : 75 + Math.round(seededRandom() * 15)
   const swapRisk: ConfidenceData["swapDisclosureRisk"] = leverageType.includes("TRS") || leverageType.includes("swap") ? "high" : leverageRatio > 20 ? "medium" : "low"
 
   // Distribution sustainability
@@ -256,6 +263,9 @@ function generateConfidence(profile: {
     distributionRedFlags: redFlags,
   }
 }
+
+// Reset seed before generating fund profiles for deterministic output
+_seed = 42
 
 // ─── Fund Profiles ──────────────────────────────────────────────────────────
 
@@ -577,16 +587,27 @@ for (const p of [utfProfile, pdiProfile, rqiProfile]) {
   }
 }
 
-export const cefUniverse: CEFProfile[] = [
+// ─── Import and build 40 Barchart-sourced fund profiles ─────────────────────
+import { barchartSeeds } from "./barchart-universe"
+
+const barchartProfiles: CEFProfile[] = barchartSeeds.map(seed => buildCEF(seed))
+
+// ─── Full 50-fund Universe ──────────────────────────────────────────────────
+
+const core10: CEFProfile[] = [
   utfProfile, pdiProfile, rqiProfile, ptyProfile, gofProfile,
   eosProfile, stkProfile, usaProfile, utgProfile, dnpProfile,
 ]
+
+export const cefUniverse: CEFProfile[] = [...core10, ...barchartProfiles]
 
 export const cefByTicker: Record<string, CEFProfile> = Object.fromEntries(
   cefUniverse.map(p => [p.overview.ticker, p])
 )
 
-export const TOP10_TICKERS = cefUniverse.map(p => p.overview.ticker)
+export const CORE_TICKERS = core10.map(p => p.overview.ticker)
+
+export const ALL_TICKERS = cefUniverse.map(p => p.overview.ticker)
 
 // ─── 5-Pillar Scoring Engine ────────────────────────────────────────────────
 // Weights: Yield Quality 25%, Discount Attractiveness 25%,
