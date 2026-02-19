@@ -1,6 +1,7 @@
 // ─── CEF Universe Data Layer ────────────────────────────────────────────────
-// 50 closed-end funds: 10 detailed profiles + 40 from Barchart CSV (2026-02-13).
-// Includes 5-pillar scoring engine and PSI ranking per spec.
+// 50 closed-end funds from Barchart watchlist (2026-02-19 intraday).
+// All tickers treated equally -- scoring engine determines rankings dynamically.
+// No circular dependencies: all seeds defined inline.
 
 import {
   type Holding,
@@ -31,7 +32,7 @@ import {
 } from "./utf-data"
 
 export { formatCurrency, formatPercent, formatBps, PILLAR_WEIGHTS, PILLAR_LABELS }
-export type { FundRanking, PillarScores }
+export type { FundRanking, PillarScores, PerformanceMetrics, RiskMetrics }
 
 // ─── CEF Profile Types ──────────────────────────────────────────────────────
 
@@ -51,11 +52,10 @@ export interface CEFOverview {
   inceptionDate: string
   benchmark: string
   category: "infrastructure" | "fixed-income" | "reit" | "equity" | "multi-asset"
-  // CSV-aligned fields from universe_cef_metrics.csv
-  return90d: number     // 90-day return %
-  holdingsDate: string  // last disclosure date (YYYY-MM-DD)
-  unii: number          // undistributed net investment income per share
-  distributionCoverage: number // ratio: UNII + income / distribution
+  return90d: number
+  holdingsDate: string
+  unii: number
+  distributionCoverage: number
 }
 
 export interface CEFProfile {
@@ -75,37 +75,37 @@ export interface CEFProfile {
   confidence: ConfidenceData
 }
 
-// ─── Utilities ──────────────────────────────────────────────────────────────
+// ─── Data Generators ────────────────────────────────────────────────────────
 
-function generateNavHistory(
-  baseNav: number,
-  basePrice: number,
-  volatility: number,
-  months: number = 24
-): NAVPricePoint[] {
-  const history: NAVPricePoint[] = []
-  let nav = baseNav * 0.85
-  let price = basePrice * 0.84
-  const startDate = new Date(2024, 1, 1)
-  for (let i = 0; i < months; i++) {
-    const d = new Date(startDate)
+function generateNavHistory(navNow: number, priceNow: number, vol: number): NAVPricePoint[] {
+  const pts: NAVPricePoint[] = []
+  const months = 24
+  const start = new Date()
+  start.setMonth(start.getMonth() - months)
+  for (let i = 0; i <= months; i++) {
+    const d = new Date(start)
     d.setMonth(d.getMonth() + i)
-    const drift = 0.008
-    nav *= 1 + drift + (Math.sin(i * 0.5) * volatility) + (i % 3 === 0 ? volatility * 0.5 : 0)
-    price *= 1 + drift + (Math.sin(i * 0.5 + 0.3) * volatility * 1.2) + (i % 4 === 0 ? -volatility * 0.3 : 0)
-    history.push({
+    const t = i / months
+    const navDrift = 1 + (t - 0.5) * 0.1
+    const navV = navNow * navDrift + Math.sin(i * 0.6) * navNow * vol
+    const priceV = navV * (priceNow / navNow) + Math.sin(i * 0.4 + 1) * navNow * vol * 0.5
+    pts.push({
       date: d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-      nav: parseFloat(nav.toFixed(2)),
-      price: parseFloat(price.toFixed(2)),
+      nav: parseFloat(navV.toFixed(2)),
+      marketPrice: parseFloat(priceV.toFixed(2)),
+      premium: parseFloat(((priceV / navV - 1) * 100).toFixed(2)),
+      volume: Math.round(500000 + Math.sin(i) * 200000),
     })
   }
-  return history
+  return pts
 }
 
-function generateDistributions(rate: number, price: number, months: number = 24): DistributionRecord[] {
-  const monthly = (rate / 100 * price) / 12
+function generateDistributions(rate: number, price: number): DistributionRecord[] {
+  const monthly = (rate / 100) * price / 12
   const records: DistributionRecord[] = []
-  const start = new Date(2024, 1, 1)
+  const start = new Date()
+  start.setMonth(start.getMonth() - 24)
+  const months = 24
   for (let i = 0; i < months; i++) {
     const d = new Date(start)
     d.setMonth(d.getMonth() + i)
@@ -120,7 +120,7 @@ function generateDistributions(rate: number, price: number, months: number = 24)
   return records
 }
 
-// ─── Seeded PRNG (deterministic across server/client to prevent hydration mismatch)
+// ─── Seeded PRNG ────────────────────────────────────────────────────────────
 let _seed = 42
 function seededRandom(): number {
   _seed = (_seed * 16807 + 0) % 2147483647
@@ -134,7 +134,6 @@ function generateLeverageProbe(leverageRatio: number, leverageType: string): Lev
   const baseResidual = leverageRatio > 25 ? 0.8 + seededRandom() * 1.2 : 0.2 + seededRandom() * 0.6
   const residual = hasDerivatives ? baseResidual * 1.4 : baseResidual
   const flagged = residual > 1.0
-
   const instruments: string[] = []
   if (leverageType.includes("TRS")) instruments.push("Total Return Swaps")
   if (leverageType.includes("swap")) instruments.push("Interest Rate Swaps")
@@ -143,9 +142,7 @@ function generateLeverageProbe(leverageRatio: number, leverageType: string): Lev
   if (leverageType.includes("repos") || leverageType.includes("Reverse")) instruments.push("Reverse Repos")
   if (leverageType.includes("facility")) instruments.push("Credit Facility")
   if (instruments.length === 0) instruments.push("None detected")
-
   const impliedNotional = hasDerivatives ? Math.round(leverageRatio * 8 + seededRandom() * 100) : 0
-
   return {
     realizedVsReconstructed: parseFloat(residual.toFixed(2)),
     residualFlagged: flagged,
@@ -164,22 +161,15 @@ function generateDriftRegime(navHistory: NAVPricePoint[], factors: FactorExposur
   const driftTimeSeries: DriftMetric[] = navHistory.map((h, i) => {
     const base30 = 0.02 + Math.sin(i * 0.4) * 0.015 + seededRandom() * 0.01
     const base90 = 0.015 + Math.sin(i * 0.2) * 0.01 + seededRandom() * 0.008
-    return {
-      date: h.date,
-      rolling30d: parseFloat(base30.toFixed(4)),
-      rolling90d: parseFloat(base90.toFixed(4)),
-    }
+    return { date: h.date, rolling30d: parseFloat(base30.toFixed(4)), rolling90d: parseFloat(base90.toFixed(4)) }
   })
-
   const shiftFactors = factors.filter(f => f.significance === "high").slice(0, 3)
   const regimeShifts: RegimeShift[] = [
     { date: navHistory[Math.floor(navHistory.length * 0.3)]?.date || "Jun 24", factor: shiftFactors[0]?.factor || "Market Beta", direction: "increase", magnitude: 0.18, significance: "minor" },
     { date: navHistory[Math.floor(navHistory.length * 0.7)]?.date || "Sep 25", factor: shiftFactors[1]?.factor || "Duration", direction: "decrease", magnitude: 0.32, significance: "major" },
   ]
-
   const maxDrift = Math.max(...driftTimeSeries.map(d => d.rolling30d))
   const currentRegime: DriftRegimeData["currentRegime"] = maxDrift > 0.04 ? "volatile" : maxDrift > 0.025 ? "transitioning" : "stable"
-
   return { driftTimeSeries, regimeShifts, currentRegime, changePointCount: regimeShifts.length }
 }
 
@@ -190,251 +180,43 @@ function generateLiquidityData(holdings: Holding[], aum: number): LiquidityData 
     const marketCap = h.marketValue / (h.weight / 100) / 1e9 * (3 + seededRandom() * 10)
     const score = Math.min(100, Math.round(Math.log10(advProxy + 1) * 30 + (marketCap > 10 ? 20 : marketCap > 1 ? 10 : 0)))
     const daysToLiq = Math.max(1, Math.round(h.marketValue / (advProxy * 1e6 * 0.2)))
-    return {
-      ticker: h.ticker,
-      name: h.name,
-      weight: h.weight,
-      advProxy: parseFloat(advProxy.toFixed(1)),
-      marketCap: parseFloat(marketCap.toFixed(1)),
-      liquidityScore: score,
-      daysToLiquidate: daysToLiq,
-    }
+    return { ticker: h.ticker, name: h.name, weight: h.weight, advProxy: parseFloat(advProxy.toFixed(1)), marketCap: parseFloat(marketCap.toFixed(1)), liquidityScore: score, daysToLiquidate: daysToLiq }
   })
-
   const weightedScore = holdingLiquidity.reduce((s, h) => s + h.liquidityScore * h.weight, 0) / Math.max(1, holdingLiquidity.reduce((s, h) => s + h.weight, 0))
   const illiquidHoldings = holdingLiquidity.filter(h => h.liquidityScore < 40)
   const illiquidPct = illiquidHoldings.reduce((s, h) => s + h.weight, 0)
-
-  return {
-    holdings: holdingLiquidity,
-    overallIndex: Math.round(weightedScore),
-    illiquidPct: parseFloat(illiquidPct.toFixed(1)),
-    largeIlliquidPositions: illiquidHoldings.filter(h => h.weight > 1.5).map(h => h.ticker),
-  }
+  return { holdings: holdingLiquidity, overallIndex: Math.round(weightedScore), illiquidPct: parseFloat(illiquidPct.toFixed(1)), largeIlliquidPositions: illiquidHoldings.filter(h => h.weight > 1.5).map(h => h.ticker) }
 }
 
-function generateConfidence(profile: {
-  leverageRatio: number
-  leverageType: string
-  distributionRate: number
-  navReturn1Y: number
-  expenseRatio: number
-  caveats: string[]
-}): ConfidenceData {
+function generateConfidence(profile: { leverageRatio: number; leverageType: string; distributionRate: number; navReturn1Y: number; expenseRatio: number; caveats: string[] }): ConfidenceData {
   const { leverageRatio, leverageType, distributionRate, navReturn1Y, expenseRatio, caveats } = profile
-
-  // Quality deductions
   let quality = 85
   if (leverageRatio > 30) quality -= 10
   if (leverageType.includes("TRS") || leverageType.includes("swap")) quality -= 8
   if (distributionRate > 10) quality -= 5
   if (caveats.length > 3) quality -= 3
   quality = Math.max(20, Math.min(100, quality + Math.round(seededRandom() * 6 - 3)))
-
-  const holdingsAge = 45 + Math.round(seededRandom() * 30) // 45-75 days
+  const holdingsAge = 45 + Math.round(seededRandom() * 30)
   const dataCompleteness = leverageType.includes("None") ? 92 : 75 + Math.round(seededRandom() * 15)
   const swapRisk: ConfidenceData["swapDisclosureRisk"] = leverageType.includes("TRS") || leverageType.includes("swap") ? "high" : leverageRatio > 20 ? "medium" : "low"
-
-  // Distribution sustainability
   const coverageRatio = navReturn1Y > 0 ? navReturn1Y / distributionRate : 0
   let distScore = Math.round(coverageRatio * 80)
   if (distScore > 100) distScore = 100
   if (distScore < 0) distScore = 0
   if (distributionRate > navReturn1Y * 1.5) distScore = Math.min(distScore, 35)
-
   const redFlags: string[] = []
   if (coverageRatio < 0.7) redFlags.push("Distribution exceeds NAV income by >30%")
   if (distributionRate > 10) redFlags.push("Elevated distribution rate may include ROC")
   if (expenseRatio > 2.5) redFlags.push("High expense ratio erodes net income coverage")
   if (leverageRatio > 30) redFlags.push("Heavy leverage amplifies distribution risk in rate rises")
-
   return {
     qualityScore: quality,
-    invalidationConditions: [
-      `Holdings data is ${holdingsAge} days stale`,
-      ...(swapRisk !== "low" ? ["Undisclosed swap/derivative positions possible"] : []),
-      "Rapid intraday trading not captured in monthly snapshots",
-      "FX hedging positions not visible in equity holdings",
-    ],
-    holdingsAge,
-    dataCompleteness,
-    swapDisclosureRisk: swapRisk,
-    distributionScore: distScore,
-    distributionRedFlags: redFlags,
+    invalidationConditions: [`Holdings data is ${holdingsAge} days stale`, ...(swapRisk !== "low" ? ["Undisclosed swap/derivative positions possible"] : []), "Rapid intraday trading not captured in monthly snapshots", "FX hedging positions not visible in equity holdings"],
+    holdingsAge, dataCompleteness, swapDisclosureRisk: swapRisk, distributionScore: distScore, distributionRedFlags: redFlags,
   }
 }
 
-// Reset seed before generating fund profiles for deterministic output
-_seed = 42
-
-// ─── Fund Profiles ──────────────────────────────────────────────────────────
-
-const utfProfile: CEFProfile = {
-  overview: { ticker: "UTF", name: "Cohen & Steers Infrastructure Fund", sponsor: "Cohen & Steers", strategy: "Global listed infrastructure with leverage", aum: 3.0, adv: 8.2, navPerShare: 26.42, marketPrice: 24.89, premiumDiscount: -5.79, distributionRate: 7.8, leverageRatio: 22.4, expenseRatio: 2.16, inceptionDate: "Mar 2004", benchmark: "S&P Global Infrastructure Index", category: "infrastructure", return90d: 3.8, holdingsDate: "2025-12-31", unii: 0.42, distributionCoverage: 1.12 },
-  holdings: [
-    { name: "NextEra Energy Inc", ticker: "NEE", sector: "Utilities", weight: 6.2, marketValue: 186000000, country: "US" },
-    { name: "American Tower Corp", ticker: "AMT", sector: "REITs", weight: 5.8, marketValue: 174000000, country: "US" },
-    { name: "Crown Castle Intl", ticker: "CCI", sector: "REITs", weight: 4.1, marketValue: 123000000, country: "US" },
-    { name: "Enbridge Inc", ticker: "ENB", sector: "Energy Infrastructure", weight: 3.9, marketValue: 117000000, country: "CA" },
-    { name: "Transurban Group", ticker: "TCL.AX", sector: "Toll Roads", weight: 3.6, marketValue: 108000000, country: "AU" },
-    { name: "National Grid PLC", ticker: "NGG", sector: "Utilities", weight: 3.4, marketValue: 102000000, country: "UK" },
-    { name: "Williams Companies", ticker: "WMB", sector: "Energy Infrastructure", weight: 3.2, marketValue: 96000000, country: "US" },
-    { name: "SBA Communications", ticker: "SBAC", sector: "REITs", weight: 3.0, marketValue: 90000000, country: "US" },
-    { name: "Sempra Energy", ticker: "SRE", sector: "Utilities", weight: 2.8, marketValue: 84000000, country: "US" },
-    { name: "Brookfield Asset Mgmt", ticker: "BAM", sector: "Asset Management", weight: 2.7, marketValue: 81000000, country: "CA" },
-    { name: "Duke Energy Corp", ticker: "DUK", sector: "Utilities", weight: 2.5, marketValue: 75000000, country: "US" },
-    { name: "Aena SME SA", ticker: "AENA.MC", sector: "Airports", weight: 2.4, marketValue: 72000000, country: "ES" },
-    { name: "TC Energy Corp", ticker: "TRP", sector: "Energy Infrastructure", weight: 2.3, marketValue: 69000000, country: "CA" },
-    { name: "Prologis Inc", ticker: "PLD", sector: "REITs", weight: 2.2, marketValue: 66000000, country: "US" },
-    { name: "Enel SpA", ticker: "ENEL.MI", sector: "Utilities", weight: 2.1, marketValue: 63000000, country: "IT" },
-  ],
-  sectors: [
-    { sector: "Utilities", weight: 32.8, color: "#4a9eff" },
-    { sector: "REITs", weight: 18.4, color: "#34d399" },
-    { sector: "Energy Infrastructure", weight: 16.2, color: "#fbbf24" },
-    { sector: "Toll Roads / Transport", weight: 10.8, color: "#f87171" },
-    { sector: "Telecom Infrastructure", weight: 8.6, color: "#a78bfa" },
-    { sector: "Airports", weight: 5.2, color: "#fb923c" },
-    { sector: "Other", weight: 8.0, color: "#64748b" },
-  ],
-  factors: [
-    { factor: "Dividend Yield", exposure: 0.82, tStat: 8.4, significance: "high" },
-    { factor: "Interest Rate Sensitivity", exposure: -0.65, tStat: -6.2, significance: "high" },
-    { factor: "Infrastructure Beta", exposure: 0.91, tStat: 12.1, significance: "high" },
-    { factor: "REIT Beta", exposure: 0.48, tStat: 4.1, significance: "high" },
-    { factor: "Value", exposure: 0.35, tStat: 2.8, significance: "medium" },
-    { factor: "Momentum", exposure: 0.12, tStat: 1.1, significance: "low" },
-    { factor: "Credit Sensitivity", exposure: 0.28, tStat: 2.3, significance: "medium" },
-    { factor: "Leverage Factor", exposure: 0.44, tStat: 3.6, significance: "high" },
-  ],
-  returnDecomposition: [
-    { period: "3 Month", totalReturn: 4.2, navReturn: 3.1, premiumDiscountEffect: 0.4, distributionReturn: 1.95, leverageEffect: -1.25 },
-    { period: "6 Month", totalReturn: 8.8, navReturn: 6.5, premiumDiscountEffect: 0.8, distributionReturn: 3.9, leverageEffect: -2.4 },
-    { period: "1 Year", totalReturn: 15.6, navReturn: 11.2, premiumDiscountEffect: 1.2, distributionReturn: 7.8, leverageEffect: -4.6 },
-    { period: "2 Year", totalReturn: 28.4, navReturn: 20.8, premiumDiscountEffect: 2.1, distributionReturn: 15.6, leverageEffect: -10.1 },
-  ],
-  navHistory: generateNavHistory(26.42, 24.89, 0.02),
-  distributions: generateDistributions(7.8, 24.89),
-  performance: { return1Y: 15.6, return3Y: 8.2, return5Y: 7.8, returnYTD: 4.2, navReturn1Y: 11.2, priceReturn1Y: 15.6, volatility1Y: 14.8, sharpeRatio: 0.72, maxDrawdown1Y: -8.4, beta: 0.78 },
-  risk: { leverageRatio: 22.4, leverageType: "Reverse repos + credit facility", leverageCost: "SOFR + 85bps", expenseRatio: 2.16, managementFee: 1.0, premiumDiscountCurrent: -5.79, premiumDiscount1YAvg: -3.8, premiumDiscountPercentile: 22, volatility90d: 12.6, volatility1Y: 14.8, drawdownFromPeak: -5.2, zScoreDiscount: -1.24 },
-  caveats: ["Holdings disclosure lags ~60 days", "Reverse repo financing rates may shift with SOFR", "Active management alpha not captured by static analysis", "International holdings subject to undisclosed FX hedging"],
-  leverageProbe: null as unknown as LeverageProbe,
-  driftRegime: null as unknown as DriftRegimeData,
-  liquidity: null as unknown as LiquidityData,
-  confidence: null as unknown as ConfidenceData,
-}
-
-const pdiProfile: CEFProfile = {
-  overview: { ticker: "PDI", name: "PIMCO Dynamic Income Fund", sponsor: "PIMCO", strategy: "Multi-sector fixed income with aggressive leverage", aum: 4.8, adv: 15.4, navPerShare: 18.92, marketPrice: 19.84, premiumDiscount: 4.86, distributionRate: 12.1, leverageRatio: 38.2, expenseRatio: 3.42, inceptionDate: "May 2012", benchmark: "Bloomberg US Aggregate Bond Index", category: "fixed-income", return90d: 2.1, holdingsDate: "2025-12-31", unii: -0.18, distributionCoverage: 0.85 },
-  holdings: [
-    { name: "US Treasury 2.875% 2032", ticker: "UST", sector: "Government", weight: 8.2, marketValue: 393600000, country: "US" },
-    { name: "FNMA 30Y 4.0%", ticker: "FNMA", sector: "Agency MBS", weight: 7.1, marketValue: 340800000, country: "US" },
-    { name: "GNMA 30Y 3.5%", ticker: "GNMA", sector: "Agency MBS", weight: 5.8, marketValue: 278400000, country: "US" },
-    { name: "JPMorgan Chase 5.25% 2030", ticker: "JPM", sector: "Investment Grade", weight: 3.4, marketValue: 163200000, country: "US" },
-    { name: "Brazil 6.0% 2033", ticker: "BRAZIL", sector: "EM Sovereign", weight: 3.1, marketValue: 148800000, country: "BR" },
-    { name: "FHLMC 15Y 3.0%", ticker: "FHLMC", sector: "Agency MBS", weight: 2.9, marketValue: 139200000, country: "US" },
-    { name: "Mexico 5.75% 2034", ticker: "MEXICO", sector: "EM Sovereign", weight: 2.7, marketValue: 129600000, country: "MX" },
-    { name: "Goldman Sachs 4.75% 2029", ticker: "GS", sector: "Investment Grade", weight: 2.5, marketValue: 120000000, country: "US" },
-    { name: "Ford Motor Credit 6.5% 2028", ticker: "F", sector: "High Yield", weight: 2.3, marketValue: 110400000, country: "US" },
-    { name: "CLO Equity Tranche", ticker: "CLO-EQ", sector: "Structured Credit", weight: 2.1, marketValue: 100800000, country: "US" },
-    { name: "T-Mobile 4.375% 2030", ticker: "TMUS", sector: "Investment Grade", weight: 1.9, marketValue: 91200000, country: "US" },
-    { name: "Turkey 7.25% 2032", ticker: "TURKEY", sector: "EM Sovereign", weight: 1.8, marketValue: 86400000, country: "TR" },
-    { name: "Carnival Corp 7.0% 2029", ticker: "CCL", sector: "High Yield", weight: 1.7, marketValue: 81600000, country: "US" },
-    { name: "CMBS 2024-1 A1", ticker: "CMBS", sector: "CMBS", weight: 1.6, marketValue: 76800000, country: "US" },
-    { name: "Indonesia 5.5% 2035", ticker: "INDO", sector: "EM Sovereign", weight: 1.5, marketValue: 72000000, country: "ID" },
-  ],
-  sectors: [
-    { sector: "Agency MBS", weight: 28.4, color: "#4a9eff" },
-    { sector: "EM Sovereign", weight: 18.2, color: "#34d399" },
-    { sector: "Investment Grade", weight: 14.8, color: "#fbbf24" },
-    { sector: "High Yield", weight: 12.6, color: "#f87171" },
-    { sector: "Government", weight: 10.1, color: "#a78bfa" },
-    { sector: "Structured Credit", weight: 8.4, color: "#fb923c" },
-    { sector: "Other", weight: 7.5, color: "#64748b" },
-  ],
-  factors: [
-    { factor: "Duration", exposure: 0.72, tStat: 7.8, significance: "high" },
-    { factor: "Credit Spread", exposure: 0.88, tStat: 9.2, significance: "high" },
-    { factor: "MBS Prepayment", exposure: 0.61, tStat: 5.4, significance: "high" },
-    { factor: "EM Currency", exposure: 0.35, tStat: 3.1, significance: "medium" },
-    { factor: "Leverage Factor", exposure: 0.78, tStat: 6.8, significance: "high" },
-    { factor: "Dividend Yield", exposure: 0.92, tStat: 10.4, significance: "high" },
-    { factor: "Value", exposure: 0.15, tStat: 1.3, significance: "low" },
-    { factor: "Momentum", exposure: -0.22, tStat: -1.8, significance: "low" },
-  ],
-  returnDecomposition: [
-    { period: "3 Month", totalReturn: 3.8, navReturn: 2.4, premiumDiscountEffect: 0.8, distributionReturn: 3.0, leverageEffect: -2.4 },
-    { period: "6 Month", totalReturn: 6.9, navReturn: 4.2, premiumDiscountEffect: 1.4, distributionReturn: 6.1, leverageEffect: -4.8 },
-    { period: "1 Year", totalReturn: 11.8, navReturn: 7.6, premiumDiscountEffect: 2.2, distributionReturn: 12.1, leverageEffect: -10.1 },
-    { period: "2 Year", totalReturn: 19.4, navReturn: 12.8, premiumDiscountEffect: 3.8, distributionReturn: 24.2, leverageEffect: -21.4 },
-  ],
-  navHistory: generateNavHistory(18.92, 19.84, 0.015),
-  distributions: generateDistributions(12.1, 19.84),
-  performance: { return1Y: 11.8, return3Y: 5.4, return5Y: 4.2, returnYTD: 3.8, navReturn1Y: 7.6, priceReturn1Y: 11.8, volatility1Y: 11.2, sharpeRatio: 0.48, maxDrawdown1Y: -6.8, beta: 0.52 },
-  risk: { leverageRatio: 38.2, leverageType: "Reverse repos + TRS + interest rate swaps", leverageCost: "SOFR + 75bps", expenseRatio: 3.42, managementFee: 1.70, premiumDiscountCurrent: 4.86, premiumDiscount1YAvg: 3.2, premiumDiscountPercentile: 72, volatility90d: 9.8, volatility1Y: 11.2, drawdownFromPeak: -3.8, zScoreDiscount: 0.88 },
-  caveats: ["38% leverage amplifies all risks ~1.6x", "CLO equity positions are illiquid and mark-to-model", "Premium (+4.9%) creates entry risk", "EM sovereign exposure subject to gap risk", "Distribution may include return of capital"],
-  leverageProbe: null as unknown as LeverageProbe,
-  driftRegime: null as unknown as DriftRegimeData,
-  liquidity: null as unknown as LiquidityData,
-  confidence: null as unknown as ConfidenceData,
-}
-
-const rqiProfile: CEFProfile = {
-  overview: { ticker: "RQI", name: "Cohen & Steers Quality Income Realty Fund", sponsor: "Cohen & Steers", strategy: "US REIT income with moderate leverage", aum: 2.1, adv: 4.6, navPerShare: 13.88, marketPrice: 13.12, premiumDiscount: -5.47, distributionRate: 6.9, leverageRatio: 25.1, expenseRatio: 1.92, inceptionDate: "Feb 2002", benchmark: "FTSE Nareit All Equity REITs Index", category: "reit", return90d: 4.2, holdingsDate: "2025-12-31", unii: 0.28, distributionCoverage: 1.05 },
-  holdings: [
-    { name: "Prologis Inc", ticker: "PLD", sector: "Industrial REITs", weight: 7.4, marketValue: 155400000, country: "US" },
-    { name: "American Tower Corp", ticker: "AMT", sector: "Specialty REITs", weight: 6.8, marketValue: 142800000, country: "US" },
-    { name: "Equinix Inc", ticker: "EQIX", sector: "Data Center REITs", weight: 5.2, marketValue: 109200000, country: "US" },
-    { name: "Welltower Inc", ticker: "WELL", sector: "Healthcare REITs", weight: 4.6, marketValue: 96600000, country: "US" },
-    { name: "Digital Realty Trust", ticker: "DLR", sector: "Data Center REITs", weight: 4.1, marketValue: 86100000, country: "US" },
-    { name: "Public Storage", ticker: "PSA", sector: "Self Storage", weight: 3.8, marketValue: 79800000, country: "US" },
-    { name: "Simon Property Group", ticker: "SPG", sector: "Retail REITs", weight: 3.5, marketValue: 73500000, country: "US" },
-    { name: "Realty Income Corp", ticker: "O", sector: "Net Lease", weight: 3.2, marketValue: 67200000, country: "US" },
-    { name: "VICI Properties", ticker: "VICI", sector: "Specialty REITs", weight: 2.9, marketValue: 60900000, country: "US" },
-    { name: "Crown Castle Intl", ticker: "CCI", sector: "Specialty REITs", weight: 2.7, marketValue: 56700000, country: "US" },
-    { name: "AvalonBay Communities", ticker: "AVB", sector: "Residential REITs", weight: 2.4, marketValue: 50400000, country: "US" },
-    { name: "Extra Space Storage", ticker: "EXR", sector: "Self Storage", weight: 2.2, marketValue: 46200000, country: "US" },
-    { name: "SBA Communications", ticker: "SBAC", sector: "Specialty REITs", weight: 2.0, marketValue: 42000000, country: "US" },
-    { name: "Alexandria Real Estate", ticker: "ARE", sector: "Office REITs", weight: 1.8, marketValue: 37800000, country: "US" },
-    { name: "Invitation Homes", ticker: "INVH", sector: "Residential REITs", weight: 1.7, marketValue: 35700000, country: "US" },
-  ],
-  sectors: [
-    { sector: "Specialty REITs", weight: 24.8, color: "#4a9eff" },
-    { sector: "Data Center REITs", weight: 16.2, color: "#34d399" },
-    { sector: "Industrial REITs", weight: 14.6, color: "#fbbf24" },
-    { sector: "Healthcare REITs", weight: 10.8, color: "#f87171" },
-    { sector: "Residential REITs", weight: 10.2, color: "#a78bfa" },
-    { sector: "Self Storage", weight: 8.4, color: "#fb923c" },
-    { sector: "Other", weight: 15.0, color: "#64748b" },
-  ],
-  factors: [
-    { factor: "REIT Beta", exposure: 0.95, tStat: 14.2, significance: "high" },
-    { factor: "Dividend Yield", exposure: 0.78, tStat: 7.6, significance: "high" },
-    { factor: "Interest Rate Sensitivity", exposure: -0.72, tStat: -6.8, significance: "high" },
-    { factor: "Value", exposure: 0.42, tStat: 3.4, significance: "medium" },
-    { factor: "Quality", exposure: 0.58, tStat: 4.8, significance: "high" },
-    { factor: "Momentum", exposure: 0.18, tStat: 1.5, significance: "low" },
-    { factor: "Size", exposure: -0.15, tStat: -1.2, significance: "low" },
-    { factor: "Leverage Factor", exposure: 0.38, tStat: 3.0, significance: "medium" },
-  ],
-  returnDecomposition: [
-    { period: "3 Month", totalReturn: 3.8, navReturn: 3.2, premiumDiscountEffect: 0.2, distributionReturn: 1.73, leverageEffect: -1.35 },
-    { period: "6 Month", totalReturn: 7.2, navReturn: 5.8, premiumDiscountEffect: 0.5, distributionReturn: 3.45, leverageEffect: -2.55 },
-    { period: "1 Year", totalReturn: 13.8, navReturn: 10.6, premiumDiscountEffect: 1.0, distributionReturn: 6.9, leverageEffect: -4.7 },
-    { period: "2 Year", totalReturn: 24.2, navReturn: 18.4, premiumDiscountEffect: 1.8, distributionReturn: 13.8, leverageEffect: -9.8 },
-  ],
-  navHistory: generateNavHistory(13.88, 13.12, 0.022),
-  distributions: generateDistributions(6.9, 13.12),
-  performance: { return1Y: 13.8, return3Y: 7.1, return5Y: 6.4, returnYTD: 3.8, navReturn1Y: 10.6, priceReturn1Y: 13.8, volatility1Y: 16.2, sharpeRatio: 0.62, maxDrawdown1Y: -9.2, beta: 0.85 },
-  risk: { leverageRatio: 25.1, leverageType: "Reverse repos + credit facility", leverageCost: "SOFR + 90bps", expenseRatio: 1.92, managementFee: 0.90, premiumDiscountCurrent: -5.47, premiumDiscount1YAvg: -4.2, premiumDiscountPercentile: 28, volatility90d: 14.8, volatility1Y: 16.2, drawdownFromPeak: -6.8, zScoreDiscount: -0.92 },
-  caveats: ["Leverage amplifies rate sensitivity", "REIT NAV estimates lag actual values", "Concentration in data center/specialty REITs"],
-  leverageProbe: null as unknown as LeverageProbe,
-  driftRegime: null as unknown as DriftRegimeData,
-  liquidity: null as unknown as LiquidityData,
-  confidence: null as unknown as ConfidenceData,
-}
-
-// ─── Builder for remaining 7 funds ──────────────────────────────────────────
+// ─── Fund Seed & Builder ────────────────────────────────────────────────────
 
 interface FundSeed {
   overview: CEFOverview
@@ -443,23 +225,20 @@ interface FundSeed {
   perf: PerformanceMetrics
   riskData: RiskMetrics
   caveats: string[]
-  holdingNames?: [string, string, string, number, number, string][] // name, ticker, sector, weight, mv, country
 }
 
 function buildCEF(seed: FundSeed): CEFProfile {
   const { overview } = seed
-  const holdings: Holding[] = seed.holdingNames
-    ? seed.holdingNames.map(([name, ticker, sector, weight, mv, country]) => ({ name, ticker, sector, weight, marketValue: mv, country }))
-    : seed.sectorWeights.flatMap(([sector], si) =>
-        Array.from({ length: 2 }, (_, i) => ({
-          name: `${overview.ticker} ${sector} Holding ${i + 1}`,
-          ticker: `${overview.ticker}-${si * 2 + i + 1}`,
-          sector,
-          weight: parseFloat((7.5 - si * 1.2 - i * 0.5).toFixed(1)),
-          marketValue: Math.round(overview.aum * 1e9 * (7.5 - si * 1.2 - i * 0.5) / 100),
-          country: "US",
-        }))
-      ).filter(h => h.weight > 0).slice(0, 15)
+  const holdings: Holding[] = seed.sectorWeights.flatMap(([sector], si) =>
+    Array.from({ length: 2 }, (_, i) => ({
+      name: `${overview.ticker} ${sector} Holding ${i + 1}`,
+      ticker: `${overview.ticker}-${si * 2 + i + 1}`,
+      sector,
+      weight: parseFloat((7.5 - si * 1.2 - i * 0.5).toFixed(1)),
+      marketValue: Math.round(overview.aum * 1e9 * (7.5 - si * 1.2 - i * 0.5) / 100),
+      country: "US",
+    }))
+  ).filter(h => h.weight > 0).slice(0, 15)
 
   const sectors = seed.sectorWeights.map(([sector, weight, color]) => ({ sector, weight, color }))
   const factors = seed.factorList.map(([factor, exposure, tStat, significance]) => ({ factor, exposure, tStat, significance }))
@@ -473,11 +252,8 @@ function buildCEF(seed: FundSeed): CEFProfile {
     { period: "2 Year", totalReturn: parseFloat((dr * 1.7).toFixed(1)), navReturn: parseFloat((dr * 1.0).toFixed(1)), premiumDiscountEffect: parseFloat((pd * 0.3).toFixed(1)), distributionReturn: parseFloat((dr * 2).toFixed(2)), leverageEffect: parseFloat((-lev * 0.32).toFixed(1)) },
   ]
   const navHist = generateNavHistory(overview.navPerShare, overview.marketPrice, lev > 25 ? 0.015 : 0.022)
-  const result: CEFProfile = {
-    overview,
-    holdings,
-    sectors,
-    factors,
+  return {
+    overview, holdings, sectors, factors,
     returnDecomposition: retDecomp,
     navHistory: navHist,
     distributions: generateDistributions(dr, overview.marketPrice),
@@ -487,135 +263,170 @@ function buildCEF(seed: FundSeed): CEFProfile {
     leverageProbe: generateLeverageProbe(lev, seed.riskData.leverageType),
     driftRegime: generateDriftRegime(navHist, factors),
     liquidity: generateLiquidityData(holdings, overview.aum),
-    confidence: generateConfidence({
-      leverageRatio: lev,
-      leverageType: seed.riskData.leverageType,
-      distributionRate: dr,
-      navReturn1Y: seed.perf.navReturn1Y,
-      expenseRatio: overview.expenseRatio,
-      caveats: seed.caveats,
-    }),
-  }
-  return result
-}
-
-const ptyProfile = buildCEF({
-  overview: { ticker: "PTY", name: "PIMCO Corporate & Income Opportunity Fund", sponsor: "PIMCO", strategy: "Investment-grade and high-yield corporate bonds with leverage", aum: 3.2, adv: 11.8, navPerShare: 13.45, marketPrice: 14.62, premiumDiscount: 8.70, distributionRate: 9.8, leverageRatio: 35.6, expenseRatio: 2.85, inceptionDate: "Dec 2002", benchmark: "Bloomberg US Corporate High Yield Index", category: "fixed-income", return90d: 1.9, holdingsDate: "2025-12-31", unii: -0.08, distributionCoverage: 0.92 },
-  sectorWeights: [["Investment Grade", 28.2, "#4a9eff"], ["High Yield", 24.6, "#34d399"], ["Bank Loans", 15.4, "#fbbf24"], ["EM Debt", 12.8, "#f87171"], ["Structured Credit", 10.2, "#a78bfa"], ["Other", 8.8, "#64748b"]],
-  factorList: [["Credit Spread", 0.92, 10.8, "high"], ["Duration", 0.58, 5.2, "high"], ["Leverage Factor", 0.72, 6.4, "high"], ["Dividend Yield", 0.85, 8.8, "high"], ["Value", 0.28, 2.2, "medium"], ["Momentum", -0.18, -1.5, "low"], ["EM Currency", 0.22, 1.8, "low"], ["Quality", -0.35, -2.8, "medium"]],
-  perf: { return1Y: 10.2, return3Y: 4.8, return5Y: 3.6, returnYTD: 2.8, navReturn1Y: 6.4, priceReturn1Y: 10.2, volatility1Y: 10.8, sharpeRatio: 0.42, maxDrawdown1Y: -7.2, beta: 0.45 },
-  riskData: { leverageRatio: 35.6, leverageType: "Reverse repos + TRS + credit index swaps", leverageCost: "SOFR + 80bps", expenseRatio: 2.85, managementFee: 1.55, premiumDiscountCurrent: 8.70, premiumDiscount1YAvg: 6.5, premiumDiscountPercentile: 82, volatility90d: 9.2, volatility1Y: 10.8, drawdownFromPeak: -4.1, zScoreDiscount: 1.42 },
-  caveats: ["35.6% leverage creates 1.5x beta amplification", "Premium at +8.7% is historically elevated", "Active derivative overlay not visible in holdings", "Distribution may include return of capital"],
-})
-
-const gofProfile = buildCEF({
-  overview: { ticker: "GOF", name: "Guggenheim Strategic Opportunities Fund", sponsor: "Guggenheim", strategy: "Multi-sector credit with options overlay", aum: 2.8, adv: 6.9, navPerShare: 14.22, marketPrice: 15.88, premiumDiscount: 11.67, distributionRate: 11.4, leverageRatio: 29.3, expenseRatio: 2.65, inceptionDate: "Jul 2007", benchmark: "Bloomberg US Aggregate Bond Index", category: "multi-asset", return90d: 1.5, holdingsDate: "2025-11-30", unii: -0.32, distributionCoverage: 0.74 },
-  sectorWeights: [["CLO/ABS", 22.8, "#4a9eff"], ["High Yield", 21.4, "#34d399"], ["Bank Loans", 18.2, "#fbbf24"], ["Investment Grade", 14.6, "#f87171"], ["Agency MBS", 12.4, "#a78bfa"], ["Other", 10.6, "#64748b"]],
-  factorList: [["Credit Spread", 0.88, 9.4, "high"], ["Leverage Factor", 0.65, 5.8, "high"], ["Dividend Yield", 0.90, 10.2, "high"], ["Duration", 0.42, 3.6, "medium"], ["Momentum", -0.28, -2.2, "medium"], ["Value", 0.18, 1.4, "low"], ["Volatility", 0.35, 2.8, "medium"], ["Quality", -0.42, -3.4, "high"]],
-  perf: { return1Y: 9.8, return3Y: 4.2, return5Y: 3.8, returnYTD: 2.4, navReturn1Y: 5.8, priceReturn1Y: 9.8, volatility1Y: 12.4, sharpeRatio: 0.35, maxDrawdown1Y: -8.8, beta: 0.48 },
-  riskData: { leverageRatio: 29.3, leverageType: "Reverse repos + CDS + options overlay", leverageCost: "SOFR + 95bps", expenseRatio: 2.65, managementFee: 1.40, premiumDiscountCurrent: 11.67, premiumDiscount1YAvg: 9.8, premiumDiscountPercentile: 88, volatility90d: 11.2, volatility1Y: 12.4, drawdownFromPeak: -5.4, zScoreDiscount: 1.85 },
-  caveats: ["11.7% premium creates extreme entry risk", "CLO equity positions are illiquid and opaque", "Options overlay creates non-linear payoffs", "Distribution likely includes significant ROC"],
-})
-
-const eosProfile = buildCEF({
-  overview: { ticker: "EOS", name: "Eaton Vance Enhanced Equity Income Fund II", sponsor: "Eaton Vance (Morgan Stanley)", strategy: "Large cap equity with options overwriting", aum: 1.6, adv: 3.8, navPerShare: 19.74, marketPrice: 18.42, premiumDiscount: -6.69, distributionRate: 7.2, leverageRatio: 0, expenseRatio: 1.08, inceptionDate: "Dec 2004", benchmark: "S&P 500 Index", category: "equity", return90d: 5.1, holdingsDate: "2025-12-31", unii: 0.18, distributionCoverage: 1.22 },
-  sectorWeights: [["Technology", 28.4, "#4a9eff"], ["Healthcare", 14.8, "#34d399"], ["Financials", 13.2, "#fbbf24"], ["Consumer Discretionary", 10.6, "#f87171"], ["Industrials", 9.8, "#a78bfa"], ["Other", 23.2, "#64748b"]],
-  factorList: [["Market Beta", 0.82, 12.4, "high"], ["Dividend Yield", 0.45, 3.8, "medium"], ["Quality", 0.65, 5.6, "high"], ["Momentum", 0.38, 3.2, "medium"], ["Volatility", -0.42, -3.6, "high"], ["Options Overlay", -0.55, -4.8, "high"], ["Value", 0.22, 1.8, "low"], ["Size", -0.12, -1.0, "low"]],
-  perf: { return1Y: 18.4, return3Y: 10.2, return5Y: 9.8, returnYTD: 5.2, navReturn1Y: 16.8, priceReturn1Y: 18.4, volatility1Y: 13.2, sharpeRatio: 0.98, maxDrawdown1Y: -7.2, beta: 0.82 },
-  riskData: { leverageRatio: 0, leverageType: "None", leverageCost: "N/A", expenseRatio: 1.08, managementFee: 0.75, premiumDiscountCurrent: -6.69, premiumDiscount1YAvg: -5.8, premiumDiscountPercentile: 18, volatility90d: 12.4, volatility1Y: 13.2, drawdownFromPeak: -4.8, zScoreDiscount: -0.68 },
-  caveats: ["Options overlay caps upside in strong rallies", "Distribution includes options premium (non-dividend)", "Overwrite ratio varies and is not publicly disclosed", "Discount may widen in low-volatility environments"],
-})
-
-const stkProfile = buildCEF({
-  overview: { ticker: "STK", name: "Columbia Seligman Premium Technology Growth Fund", sponsor: "Columbia Threadneedle", strategy: "Technology equity with options overwriting", aum: 0.8, adv: 2.1, navPerShare: 32.15, marketPrice: 30.88, premiumDiscount: -3.95, distributionRate: 8.5, leverageRatio: 0, expenseRatio: 1.15, inceptionDate: "Nov 2009", benchmark: "S&P North American Technology Sector Index", category: "equity", return90d: 6.8, holdingsDate: "2025-12-31", unii: 0.10, distributionCoverage: 1.08 },
-  sectorWeights: [["Software", 32.2, "#4a9eff"], ["Semiconductors", 24.8, "#34d399"], ["Internet/Media", 18.4, "#fbbf24"], ["IT Services", 12.6, "#f87171"], ["Hardware", 8.2, "#a78bfa"], ["Other", 3.8, "#64748b"]],
-  factorList: [["Market Beta", 1.12, 14.8, "high"], ["Momentum", 0.68, 5.8, "high"], ["Growth", 0.82, 7.4, "high"], ["Volatility", -0.38, -3.2, "medium"], ["Options Overlay", -0.48, -4.2, "high"], ["Quality", 0.52, 4.4, "high"], ["Size", -0.28, -2.2, "medium"], ["Value", -0.42, -3.5, "high"]],
-  perf: { return1Y: 22.8, return3Y: 14.6, return5Y: 15.2, returnYTD: 6.8, navReturn1Y: 21.2, priceReturn1Y: 22.8, volatility1Y: 18.4, sharpeRatio: 0.92, maxDrawdown1Y: -12.4, beta: 1.12 },
-  riskData: { leverageRatio: 0, leverageType: "None", leverageCost: "N/A", expenseRatio: 1.15, managementFee: 0.80, premiumDiscountCurrent: -3.95, premiumDiscount1YAvg: -2.8, premiumDiscountPercentile: 35, volatility90d: 16.8, volatility1Y: 18.4, drawdownFromPeak: -8.2, zScoreDiscount: -0.52 },
-  caveats: ["Small AUM ($0.8B) means wider bid-ask", "Concentrated tech exposure amplifies sector drawdowns", "Options overlay ratio varies with implied vol", "May lag pure tech indices in strong rallies"],
-})
-
-const usaProfile = buildCEF({
-  overview: { ticker: "USA", name: "Liberty All-Star Equity Fund", sponsor: "ALPS Advisors", strategy: "Diversified equity with multi-manager approach", aum: 1.4, adv: 3.2, navPerShare: 7.12, marketPrice: 6.68, premiumDiscount: -6.18, distributionRate: 9.1, leverageRatio: 0, expenseRatio: 0.94, inceptionDate: "Oct 1986", benchmark: "S&P 500 Index", category: "equity", return90d: 4.7, holdingsDate: "2025-12-31", unii: 0.06, distributionCoverage: 1.15 },
-  sectorWeights: [["Technology", 24.8, "#4a9eff"], ["Healthcare", 16.2, "#34d399"], ["Financials", 14.8, "#fbbf24"], ["Consumer Discretionary", 11.4, "#f87171"], ["Industrials", 10.2, "#a78bfa"], ["Other", 22.6, "#64748b"]],
-  factorList: [["Market Beta", 0.98, 16.2, "high"], ["Value", 0.35, 2.8, "medium"], ["Quality", 0.48, 4.0, "medium"], ["Momentum", 0.28, 2.2, "medium"], ["Size", 0.12, 1.0, "low"], ["Dividend Yield", 0.42, 3.5, "medium"], ["Growth", 0.32, 2.6, "medium"], ["Volatility", -0.08, -0.7, "low"]],
-  perf: { return1Y: 16.2, return3Y: 9.8, return5Y: 10.4, returnYTD: 4.8, navReturn1Y: 15.4, priceReturn1Y: 16.2, volatility1Y: 14.2, sharpeRatio: 0.82, maxDrawdown1Y: -8.8, beta: 0.98 },
-  riskData: { leverageRatio: 0, leverageType: "None", leverageCost: "N/A", expenseRatio: 0.94, managementFee: 0.62, premiumDiscountCurrent: -6.18, premiumDiscount1YAvg: -5.2, premiumDiscountPercentile: 24, volatility90d: 13.2, volatility1Y: 14.2, drawdownFromPeak: -5.8, zScoreDiscount: -0.78 },
-  caveats: ["Fixed 10% of NAV distribution policy (unique)", "Multi-manager approach adds tracking noise", "Discount may persist due to structural CEF dynamics", "Low expense ratio favorable vs ETF alternatives"],
-})
-
-const utgProfile = buildCEF({
-  overview: { ticker: "UTG", name: "Reaves Utility Income Fund", sponsor: "Reaves Asset Management", strategy: "Utility and telecom equity with moderate leverage", aum: 2.3, adv: 5.1, navPerShare: 30.85, marketPrice: 29.42, premiumDiscount: -4.63, distributionRate: 6.5, leverageRatio: 20.8, expenseRatio: 2.02, inceptionDate: "Feb 2004", benchmark: "S&P 500 Utilities Index", category: "infrastructure", return90d: 3.4, holdingsDate: "2025-12-31", unii: 0.35, distributionCoverage: 1.18 },
-  sectorWeights: [["Electric Utilities", 34.2, "#4a9eff"], ["Multi-Utilities", 18.6, "#34d399"], ["Telecom", 14.8, "#fbbf24"], ["Water Utilities", 8.4, "#f87171"], ["Gas Utilities", 7.2, "#a78bfa"], ["Other", 16.8, "#64748b"]],
-  factorList: [["Dividend Yield", 0.85, 8.8, "high"], ["Interest Rate Sensitivity", -0.78, -7.2, "high"], ["Utility Beta", 0.92, 12.8, "high"], ["Value", 0.42, 3.4, "medium"], ["Quality", 0.55, 4.6, "high"], ["Momentum", 0.08, 0.7, "low"], ["Leverage Factor", 0.35, 2.8, "medium"], ["Volatility", -0.22, -1.8, "low"]],
-  perf: { return1Y: 12.4, return3Y: 6.8, return5Y: 7.2, returnYTD: 3.4, navReturn1Y: 9.6, priceReturn1Y: 12.4, volatility1Y: 13.8, sharpeRatio: 0.64, maxDrawdown1Y: -7.8, beta: 0.72 },
-  riskData: { leverageRatio: 20.8, leverageType: "Reverse repos + credit facility", leverageCost: "SOFR + 82bps", expenseRatio: 2.02, managementFee: 0.85, premiumDiscountCurrent: -4.63, premiumDiscount1YAvg: -3.4, premiumDiscountPercentile: 30, volatility90d: 12.2, volatility1Y: 13.8, drawdownFromPeak: -5.4, zScoreDiscount: -0.82 },
-  caveats: ["Moderate leverage amplifies rate sensitivity", "Concentrated utility sector limits diversification", "Water utility holdings are less liquid", "Never cut distribution since inception (strong track record)"],
-})
-
-const dnpProfile = buildCEF({
-  overview: { ticker: "DNP", name: "DNP Select Income Fund", sponsor: "Duff & Phelps", strategy: "Utility and energy income with leverage", aum: 3.5, adv: 7.4, navPerShare: 9.18, marketPrice: 9.95, premiumDiscount: 8.39, distributionRate: 7.1, leverageRatio: 28.4, expenseRatio: 2.18, inceptionDate: "Jan 1987", benchmark: "S&P 500 Utilities Index", category: "infrastructure", return90d: 2.8, holdingsDate: "2025-12-31", unii: 0.15, distributionCoverage: 0.98 },
-  sectorWeights: [["Electric Utilities", 30.8, "#4a9eff"], ["Energy Infrastructure", 22.4, "#34d399"], ["Gas Utilities", 12.6, "#fbbf24"], ["Multi-Utilities", 11.8, "#f87171"], ["Telecom", 8.4, "#a78bfa"], ["Other", 14.0, "#64748b"]],
-  factorList: [["Dividend Yield", 0.88, 9.2, "high"], ["Interest Rate Sensitivity", -0.72, -6.8, "high"], ["Energy Beta", 0.48, 4.0, "medium"], ["Utility Beta", 0.82, 8.4, "high"], ["Leverage Factor", 0.52, 4.4, "high"], ["Value", 0.38, 3.0, "medium"], ["Momentum", 0.14, 1.2, "low"], ["Quality", 0.32, 2.6, "medium"]],
-  perf: { return1Y: 11.2, return3Y: 5.8, return5Y: 5.4, returnYTD: 3.1, navReturn1Y: 7.8, priceReturn1Y: 11.2, volatility1Y: 13.2, sharpeRatio: 0.52, maxDrawdown1Y: -8.2, beta: 0.68 },
-  riskData: { leverageRatio: 28.4, leverageType: "Reverse repos + multi-bank facility", leverageCost: "SOFR + 88bps", expenseRatio: 2.18, managementFee: 0.95, premiumDiscountCurrent: 8.39, premiumDiscount1YAvg: 7.2, premiumDiscountPercentile: 78, volatility90d: 11.8, volatility1Y: 13.2, drawdownFromPeak: -4.8, zScoreDiscount: 1.18 },
-  caveats: ["8.4% premium creates entry risk", "Energy MLP exposure has K-1 tax complications", "28.4% leverage amplifies utility and energy risks", "Distribution stable for decades but payout ratio elevated"],
-})
-
-// ─── Universe ───────────────────────────────────────────────────────────────
-
-// Hydrate X-ray fields for manually built profiles (UTF, PDI, RQI)
-for (const p of [utfProfile, pdiProfile, rqiProfile]) {
-  if (!p.leverageProbe || (p.leverageProbe as unknown) === null) {
-    p.leverageProbe = generateLeverageProbe(p.risk.leverageRatio, p.risk.leverageType)
-  }
-  if (!p.driftRegime || (p.driftRegime as unknown) === null) {
-    p.driftRegime = generateDriftRegime(p.navHistory, p.factors)
-  }
-  if (!p.liquidity || (p.liquidity as unknown) === null) {
-    p.liquidity = generateLiquidityData(p.holdings, p.overview.aum)
-  }
-  if (!p.confidence || (p.confidence as unknown) === null) {
-    p.confidence = generateConfidence({
-      leverageRatio: p.risk.leverageRatio,
-      leverageType: p.risk.leverageType,
-      distributionRate: p.overview.distributionRate,
-      navReturn1Y: p.performance.navReturn1Y,
-      expenseRatio: p.overview.expenseRatio,
-      caveats: p.caveats,
-    })
+    confidence: generateConfidence({ leverageRatio: lev, leverageType: seed.riskData.leverageType, distributionRate: dr, navReturn1Y: seed.perf.navReturn1Y, expenseRatio: overview.expenseRatio, caveats: seed.caveats }),
   }
 }
 
-// ─── Import and build 40 Barchart-sourced fund profiles ─────────────────────
-import { barchartSeeds } from "./barchart-universe"
+// ─── Shorthand seed builder ─────────────────────────────────────────────────
+// Keeps each seed compact: bc(ticker, name, price, vol, category, overrides)
 
-const barchartProfiles: CEFProfile[] = barchartSeeds.map(seed => buildCEF(seed))
+type Cat = CEFOverview["category"]
+interface SeedOpts {
+  aum: number; dist: number; lev: number; pd: number
+  ret1y: number; ret90d: number; vol1y: number
+  unii: number; distCov: number
+  strategy: string
+  levType?: string
+  sw?: [string, number, string][]
+  fl?: [string, number, number, "high" | "medium" | "low"][]
+}
 
-// ─── Full 50-fund Universe ──────────────────────────────────────────────────
-
-const core10: CEFProfile[] = [
-  utfProfile, pdiProfile, rqiProfile, ptyProfile, gofProfile,
-  eosProfile, stkProfile, usaProfile, utgProfile, dnpProfile,
+// Factor templates by category
+const eqFactors: FundSeed["factorList"] = [
+  ["Market Beta", 0.92, 12.4, "high"], ["Dividend Yield", 0.48, 3.8, "medium"], ["Quality", 0.55, 4.6, "high"],
+  ["Momentum", 0.32, 2.6, "medium"], ["Value", 0.28, 2.2, "medium"], ["Volatility", -0.18, -1.5, "low"],
+  ["Size", -0.12, -1.0, "low"], ["Growth", 0.35, 2.8, "medium"],
+]
+const fiFactors: FundSeed["factorList"] = [
+  ["Duration", 0.72, 7.8, "high"], ["Credit Spread", 0.88, 9.2, "high"], ["MBS Prepayment", 0.61, 5.4, "high"],
+  ["EM Currency", 0.35, 3.1, "medium"], ["Carry", 0.68, 6.0, "high"], ["Volatility", -0.22, -1.8, "low"],
+  ["Liquidity", -0.15, -1.2, "low"], ["Roll Down", 0.42, 3.5, "medium"],
+]
+const infraFactors: FundSeed["factorList"] = [
+  ["Dividend Yield", 0.82, 8.4, "high"], ["Interest Rate Sensitivity", -0.65, -6.2, "high"],
+  ["Infrastructure Beta", 0.91, 12.1, "high"], ["REIT Beta", 0.48, 4.1, "high"],
+  ["Value", 0.35, 2.8, "medium"], ["Momentum", 0.12, 1.1, "low"],
+  ["Credit Sensitivity", 0.28, 2.3, "medium"], ["Leverage Factor", 0.44, 3.6, "high"],
+]
+const reitFactors: FundSeed["factorList"] = [
+  ["REIT Beta", 0.95, 14.2, "high"], ["Dividend Yield", 0.78, 7.6, "high"],
+  ["Interest Rate Sensitivity", -0.72, -6.8, "high"], ["Value", 0.42, 3.4, "medium"],
+  ["Quality", 0.58, 4.8, "high"], ["Momentum", 0.18, 1.5, "low"],
+  ["Size", -0.15, -1.2, "low"], ["Leverage Factor", 0.38, 3.0, "medium"],
+]
+const maFactors: FundSeed["factorList"] = [
+  ["Market Beta", 0.65, 6.2, "high"], ["Duration", 0.42, 3.8, "medium"], ["Credit Spread", 0.55, 4.6, "high"],
+  ["Dividend Yield", 0.58, 5.0, "high"], ["Carry", 0.38, 3.1, "medium"], ["Momentum", 0.22, 1.8, "low"],
+  ["Volatility", -0.25, -2.0, "medium"], ["Value", 0.30, 2.4, "medium"],
 ]
 
-export const cefUniverse: CEFProfile[] = [...core10, ...barchartProfiles]
+// Sector templates
+const eqSectors: FundSeed["sectorWeights"] = [["Technology", 22, "#4a9eff"], ["Healthcare", 16, "#34d399"], ["Financials", 14, "#fbbf24"], ["Consumer Disc.", 12, "#f87171"], ["Industrials", 10, "#a78bfa"], ["Other", 26, "#64748b"]]
+const fiSectors: FundSeed["sectorWeights"] = [["Investment Grade", 28, "#4a9eff"], ["High Yield", 18, "#34d399"], ["Agency MBS", 16, "#fbbf24"], ["EM Sovereign", 12, "#f87171"], ["Structured Credit", 10, "#a78bfa"], ["Other", 16, "#64748b"]]
+const infraSectors: FundSeed["sectorWeights"] = [["Utilities", 32, "#4a9eff"], ["REITs", 18, "#34d399"], ["Energy Infra", 16, "#fbbf24"], ["Transport", 11, "#f87171"], ["Telecom Infra", 9, "#a78bfa"], ["Other", 14, "#64748b"]]
+const reitSectors: FundSeed["sectorWeights"] = [["Specialty REITs", 25, "#4a9eff"], ["Data Center", 16, "#34d399"], ["Industrial", 15, "#fbbf24"], ["Healthcare", 11, "#f87171"], ["Residential", 10, "#a78bfa"], ["Other", 23, "#64748b"]]
+const maSectors: FundSeed["sectorWeights"] = [["Equities", 35, "#4a9eff"], ["Fixed Income", 25, "#34d399"], ["Alternatives", 15, "#fbbf24"], ["Convertibles", 10, "#f87171"], ["Cash", 5, "#a78bfa"], ["Other", 10, "#64748b"]]
+const muniSectors: FundSeed["sectorWeights"] = [["Revenue Bonds", 35, "#4a9eff"], ["GO Bonds", 25, "#34d399"], ["Healthcare Muni", 15, "#fbbf24"], ["Education", 10, "#f87171"], ["Transportation", 8, "#a78bfa"], ["Other", 7, "#64748b"]]
+
+const catFactors: Record<Cat, FundSeed["factorList"]> = { equity: eqFactors, "fixed-income": fiFactors, infrastructure: infraFactors, reit: reitFactors, "multi-asset": maFactors }
+const catSectors: Record<Cat, FundSeed["sectorWeights"]> = { equity: eqSectors, "fixed-income": fiSectors, infrastructure: infraSectors, reit: reitSectors, "multi-asset": maSectors }
+
+function bc(ticker: string, name: string, price: number, vol: number, cat: Cat, o: SeedOpts): FundSeed {
+  const sponsor = name.split(" ")[0]
+  const navPs = parseFloat((price / (1 + o.pd / 100)).toFixed(2))
+  const advM = parseFloat((vol * price / 1e6).toFixed(1)) || 0.5
+  return {
+    overview: {
+      ticker, name, sponsor, strategy: o.strategy, aum: o.aum, adv: advM,
+      navPerShare: navPs, marketPrice: price, premiumDiscount: o.pd,
+      distributionRate: o.dist, leverageRatio: o.lev, expenseRatio: o.lev > 20 ? 2.1 + o.lev * 0.03 : 1.1 + o.dist * 0.05,
+      inceptionDate: "Various", benchmark: cat === "equity" ? "S&P 500" : cat === "fixed-income" ? "Bloomberg Agg" : "Blended",
+      category: cat, return90d: o.ret90d, holdingsDate: "2026-02-19", unii: o.unii, distributionCoverage: o.distCov,
+    },
+    sectorWeights: o.sw ?? catSectors[cat],
+    factorList: o.fl ?? catFactors[cat],
+    perf: { return1Y: o.ret1y, return3Y: o.ret1y * 0.7, return5Y: o.ret1y * 0.6, returnYTD: o.ret90d * 0.8, navReturn1Y: o.ret1y * 0.65, priceReturn1Y: o.ret1y, volatility1Y: o.vol1y, sharpeRatio: parseFloat((o.ret1y / o.vol1y).toFixed(2)), maxDrawdown1Y: parseFloat((-o.vol1y * 0.6).toFixed(1)), beta: parseFloat((0.5 + o.vol1y / 40).toFixed(2)) },
+    riskData: { leverageRatio: o.lev, leverageType: o.levType ?? (o.lev > 25 ? "Reverse repos + credit facility" : o.lev > 0 ? "Credit facility" : "None"), leverageCost: o.lev > 0 ? "SOFR + 85bps" : "N/A", expenseRatio: o.lev > 20 ? 2.1 + o.lev * 0.03 : 1.1 + o.dist * 0.05, managementFee: 1.0, premiumDiscountCurrent: o.pd, premiumDiscount1YAvg: o.pd * 0.8, premiumDiscountPercentile: Math.round(50 + o.pd * 2), volatility90d: o.vol1y * 0.85, volatility1Y: o.vol1y, drawdownFromPeak: parseFloat((-o.vol1y * 0.4).toFixed(1)), zScoreDiscount: parseFloat((o.pd / (o.vol1y * 0.3 || 1)).toFixed(2)) },
+    caveats: [
+      `Holdings disclosure may lag ~60 days`,
+      ...(o.lev > 30 ? ["Heavy leverage amplifies drawdown risk"] : []),
+      ...(o.dist > 10 ? ["Elevated distribution may include return of capital"] : []),
+      "Static analysis; intraday positions not captured",
+    ],
+  }
+}
+
+// ─── All 50 Fund Seeds (Barchart 2026-02-19 intraday prices) ────────────────
+_seed = 42
+
+export const cefUniverse: CEFProfile[] = [
+  // Equity
+  bc("USA", "Liberty All-Star Equity Fund", 6.05, 391569, "equity", { aum: 3.4, dist: 9.2, lev: 0, pd: -4.6, ret1y: 16.4, ret90d: 4.2, vol1y: 14.2, unii: 0.18, distCov: 1.10, strategy: "Multi-manager large-cap equity with value/growth blend" }),
+  bc("ASG", "Liberty All-Star Growth Fund", 5.18, 102433, "equity", { aum: 1.2, dist: 6.4, lev: 0, pd: -8.2, ret1y: 18.2, ret90d: 5.4, vol1y: 16.8, unii: 0.08, distCov: 1.02, strategy: "Multi-manager growth equity" }),
+  bc("GAM", "General American Investors", 61.49, 6913, "equity", { aum: 1.8, dist: 4.8, lev: 0, pd: -14.2, ret1y: 12.8, ret90d: 3.2, vol1y: 15.4, unii: 0.32, distCov: 1.28, strategy: "Large-cap equity, long-term value orientation" }),
+  bc("GDV", "Gabelli Dividend & Income Trust", 29.045, 38025, "equity", { aum: 2.4, dist: 5.8, lev: 18, pd: -10.6, ret1y: 14.2, ret90d: 3.8, vol1y: 13.6, unii: 0.18, distCov: 1.15, strategy: "Equity income with covered calls and selective leverage" }),
+  bc("EOS", "Eaton Vance Enhanced Equity Income Fund II", 19.22, 380000, "equity", { aum: 1.8, dist: 7.5, lev: 0, pd: -6.4, ret1y: 18.2, ret90d: 4.8, vol1y: 15.6, unii: 0.12, distCov: 1.04, strategy: "Large-cap equity with buy-write options overlay" }),
+  bc("STK", "Columbia Seligman Premium Technology Growth Fund", 30.44, 220000, "equity", { aum: 0.9, dist: 8.8, lev: 0, pd: -2.8, ret1y: 24.8, ret90d: 6.8, vol1y: 20.4, unii: 0.06, distCov: 0.92, strategy: "Technology equity with covered call overlay" }),
+  bc("EVT", "Eaton Vance Tax-Advantaged Dividend Income Fund", 26.12, 13868, "equity", { aum: 2.2, dist: 6.2, lev: 20, pd: -5.2, ret1y: 13.8, ret90d: 3.4, vol1y: 12.8, unii: 0.14, distCov: 1.08, strategy: "Tax-efficient equity dividend income" }),
+  bc("ETJ", "Eaton Vance Risk-Managed Diversified Equity Income", 8.69, 32112, "equity", { aum: 1.2, dist: 8.4, lev: 0, pd: -7.6, ret1y: 11.2, ret90d: 2.8, vol1y: 10.8, unii: 0.06, distCov: 0.96, strategy: "Risk-managed equity with hedging overlay" }),
+  bc("FFA", "First Trust Enhanced Equity Income Fund", 21.78, 2571, "equity", { aum: 0.6, dist: 7.2, lev: 0, pd: -8.4, ret1y: 14.6, ret90d: 3.6, vol1y: 14.2, unii: 0.10, distCov: 1.02, strategy: "Equity income with covered call writing" }),
+  bc("DIAX", "Nuveen Dow 30 Dynamic Overwrite Fund", 15.62, 25092, "equity", { aum: 0.8, dist: 6.8, lev: 0, pd: -5.6, ret1y: 11.8, ret90d: 2.8, vol1y: 12.4, unii: 0.14, distCov: 1.10, strategy: "DJIA buy-write strategy" }),
+  bc("BXMX", "Nuveen S&P 500 Buy-Write Income Fund", 14.63, 19058, "equity", { aum: 1.0, dist: 7.0, lev: 0, pd: -4.8, ret1y: 12.4, ret90d: 3.0, vol1y: 11.8, unii: 0.10, distCov: 1.05, strategy: "S&P 500 covered call strategy" }),
+  bc("QQQX", "Nuveen Nasdaq 100 Dynamic Overwrite Fund", 27.425, 49763, "equity", { aum: 1.4, dist: 7.6, lev: 0, pd: -3.2, ret1y: 20.4, ret90d: 5.8, vol1y: 18.2, unii: 0.04, distCov: 0.94, strategy: "Nasdaq 100 with dynamic options overlay" }),
+  bc("PEO", "Adams Natural Resources Fund Inc", 26.13, 25794, "equity", { aum: 0.9, dist: 5.8, lev: 0, pd: -3.0, ret1y: 6.0, ret90d: 1.0, vol1y: 17.0, unii: 0.22, distCov: 1.35, strategy: "Natural resources equity long-only" }),
+  bc("GNT", "GAMCO Natural Resources Gold & Income Trust", 8.64, 12601, "equity", { aum: 0.5, dist: 5.4, lev: 0, pd: -8.8, ret1y: 8.2, ret90d: 2.6, vol1y: 19.8, unii: 0.16, distCov: 1.12, strategy: "Natural resources and gold equity with options" }),
+  bc("TY", "Tri-Continental Corporation", 33.24, 6620, "equity", { aum: 1.6, dist: 4.4, lev: 0, pd: -12.6, ret1y: 11.4, ret90d: 2.8, vol1y: 13.2, unii: 0.28, distCov: 1.32, strategy: "Diversified large-cap equity, 90+ year history" }),
+  bc("HQH", "abrdn Healthcare Investors Fund", 20.225, 112285, "equity", { aum: 1.2, dist: 8.6, lev: 0, pd: -10.2, ret1y: 14.8, ret90d: 4.2, vol1y: 18.4, unii: 0.02, distCov: 0.86, strategy: "Healthcare and biotech equity" }),
+  bc("HQL", "abrdn Life Sciences Investors Fund", 17.425, 78825, "equity", { aum: 0.8, dist: 8.2, lev: 0, pd: -11.4, ret1y: 15.8, ret90d: 4.4, vol1y: 19.2, unii: 0.04, distCov: 0.88, strategy: "Life sciences and pharma equity" }),
+  bc("CAF", "Morgan Stanley China A Share Fund", 18.05, 1390, "equity", { aum: 0.3, dist: 0, lev: 0, pd: -18.2, ret1y: 8.2, ret90d: 4.8, vol1y: 22.8, unii: 0, distCov: 0, strategy: "China A-share equity" }),
+  bc("TDF", "Templeton Dragon Fund", 11.69, 10259, "equity", { aum: 0.4, dist: 2.8, lev: 0, pd: -16.4, ret1y: 6.8, ret90d: 3.2, vol1y: 21.4, unii: 0.08, distCov: 0.82, strategy: "Greater China equity" }),
+
+  // Fixed Income
+  bc("PDI", "PIMCO Dynamic Income Fund", 19.84, 1540000, "fixed-income", { aum: 4.8, dist: 12.1, lev: 38.2, pd: 4.9, ret1y: 11.8, ret90d: 2.1, vol1y: 11.2, unii: -0.18, distCov: 0.85, levType: "Reverse repos + TRS + interest rate swaps", strategy: "Multi-sector fixed income with aggressive leverage" }),
+  bc("PTY", "PIMCO Corporate & Income Opportunity Fund", 14.22, 880000, "fixed-income", { aum: 3.4, dist: 9.4, lev: 42.8, pd: 8.3, ret1y: 10.2, ret90d: 1.8, vol1y: 10.8, unii: -0.24, distCov: 0.78, levType: "Reverse repos + TRS", strategy: "Investment-grade and high-yield corporate with aggressive leverage" }),
+  bc("GOF", "Guggenheim Strategic Opportunities Fund", 15.88, 640000, "fixed-income", { aum: 2.8, dist: 13.2, lev: 35.4, pd: 12.5, ret1y: 9.8, ret90d: 1.5, vol1y: 12.4, unii: -0.32, distCov: 0.72, strategy: "Multi-strategy fixed income with CLO and structured credit" }),
+  bc("DSL", "DoubleLine Income Solutions Fund", 11.50, 191493, "fixed-income", { aum: 2.8, dist: 8.4, lev: 30, pd: -2.8, ret1y: 8.6, ret90d: 1.8, vol1y: 10.4, unii: -0.04, distCov: 0.94, strategy: "Multi-sector fixed income with EM and structured credit" }),
+  bc("EFR", "Eaton Vance Senior Floating-Rate Fund", 10.95, 17871, "fixed-income", { aum: 1.4, dist: 7.8, lev: 28, pd: -4.2, ret1y: 8.2, ret90d: 1.6, vol1y: 8.4, unii: 0.06, distCov: 1.04, strategy: "Senior secured floating rate loans" }),
+  bc("ETW", "Eaton Vance Tax-Managed Global Buy-Write", 9.425, 68063, "fixed-income", { aum: 1.6, dist: 8.2, lev: 0, pd: -6.8, ret1y: 10.4, ret90d: 2.2, vol1y: 11.6, unii: 0.04, distCov: 0.98, strategy: "Tax-managed global buy-write with income focus" }),
+  bc("ETV", "Eaton Vance Tax-Managed Buy-Write Opportunities", 14.52, 57203, "fixed-income", { aum: 1.8, dist: 8.0, lev: 0, pd: -5.4, ret1y: 12.2, ret90d: 2.8, vol1y: 12.0, unii: 0.06, distCov: 1.00, strategy: "Tax-managed equity buy-write opportunities" }),
+  bc("DHF", "Dreyfus High Yield Strategies Fund", 2.535, 56822, "fixed-income", { aum: 0.4, dist: 9.8, lev: 28, pd: -6.4, ret1y: 7.4, ret90d: 1.6, vol1y: 11.2, unii: -0.10, distCov: 0.84, strategy: "High yield corporate bonds" }),
+  bc("JGH", "Nuveen Global High Income Fund", 12.82, 26167, "fixed-income", { aum: 1.2, dist: 8.8, lev: 26, pd: -5.8, ret1y: 9.4, ret90d: 2.0, vol1y: 10.2, unii: 0.02, distCov: 0.96, strategy: "Global high income fixed income" }),
+  bc("HYI", "Western Asset High Yield Defined Opportunity Fund", 11.24, 26719, "fixed-income", { aum: 0.8, dist: 7.6, lev: 22, pd: -4.8, ret1y: 7.8, ret90d: 1.4, vol1y: 9.2, unii: 0.04, distCov: 1.02, strategy: "High yield with defined maturity" }),
+  bc("HIO", "Western Asset High Income Opportunity Fund", 3.83, 150245, "fixed-income", { aum: 1.8, dist: 7.8, lev: 24, pd: -7.2, ret1y: 7.8, ret90d: 1.8, vol1y: 9.8, unii: 0.02, distCov: 0.98, strategy: "High income opportunity fixed income" }),
+  bc("PDX", "PIMCO Dynamic Income Strategy Fund", 20.21, 6451, "fixed-income", { aum: 0.8, dist: 10.2, lev: 36, pd: 2.4, ret1y: 9.6, ret90d: 1.6, vol1y: 11.8, unii: -0.14, distCov: 0.82, levType: "Reverse repos + TRS", strategy: "Dynamic income strategy with leverage" }),
+  bc("BWG", "BrandywineGLOBAL Global Income Opportunities", 8.52, 46520, "fixed-income", { aum: 0.6, dist: 9.4, lev: 26, pd: -8.2, ret1y: 7.2, ret90d: 1.4, vol1y: 12.8, unii: -0.06, distCov: 0.88, strategy: "Global income with emerging market focus" }),
+  bc("EDD", "Morgan Stanley Emerging Markets Domestic Debt", 6.075, 151758, "fixed-income", { aum: 1.0, dist: 8.6, lev: 0, pd: -12.4, ret1y: 5.8, ret90d: 1.2, vol1y: 14.8, unii: -0.08, distCov: 0.82, strategy: "EM local currency sovereign debt" }),
+  bc("WIW", "Western Asset Inflation-Linked Income Fund", 8.75, 133692, "fixed-income", { aum: 1.2, dist: 6.2, lev: 24, pd: -8.6, ret1y: 4.2, ret90d: 0.8, vol1y: 8.6, unii: 0.08, distCov: 1.06, strategy: "US TIPS and inflation-linked bonds" }),
+  bc("PCQ", "PIMCO California Municipal Income Fund", 9.095, 43560, "fixed-income", { aum: 0.6, dist: 5.4, lev: 34, pd: -6.2, ret1y: 5.2, ret90d: 1.0, vol1y: 9.4, unii: 0.06, distCov: 1.04, sw: muniSectors, strategy: "California municipal bonds with leverage" }),
+  bc("BFZ", "BlackRock California Municipal Income Trust", 11.11, 50000, "fixed-income", { aum: 0.4, dist: 5.2, lev: 32, pd: -8.8, ret1y: 4.8, ret90d: 1.0, vol1y: 8.2, unii: 0.04, distCov: 1.08, sw: muniSectors, strategy: "California municipal bonds" }),
+
+  // Infrastructure
+  bc("UTF", "Cohen & Steers Infrastructure Fund", 24.89, 820000, "infrastructure", { aum: 3.0, dist: 7.8, lev: 22.4, pd: -5.8, ret1y: 15.6, ret90d: 3.8, vol1y: 14.8, unii: 0.42, distCov: 1.12, strategy: "Global listed infrastructure with leverage" }),
+  bc("UTG", "Reaves Utility Income Fund", 32.18, 280000, "infrastructure", { aum: 2.4, dist: 6.4, lev: 18.6, pd: -3.2, ret1y: 14.2, ret90d: 3.5, vol1y: 12.8, unii: 0.35, distCov: 1.18, strategy: "Utility and infrastructure equity income" }),
+  bc("DNP", "DNP Select Income Fund", 9.12, 520000, "infrastructure", { aum: 3.8, dist: 7.2, lev: 24.2, pd: 2.2, ret1y: 11.4, ret90d: 2.8, vol1y: 10.6, unii: 0.22, distCov: 1.08, strategy: "Utility, telecom, and energy income with leverage" }),
+  bc("IDE", "Voya Infrastructure, Industrials and Materials Fund", 14.02, 18379, "infrastructure", { aum: 0.6, dist: 7.8, lev: 20, pd: -8.4, ret1y: 12.6, ret90d: 3.2, vol1y: 14.2, unii: 0.12, distCov: 1.02, strategy: "Infrastructure and industrials equity" }),
+
+  // REITs
+  bc("RQI", "Cohen & Steers Quality Income Realty Fund", 13.12, 460000, "reit", { aum: 2.1, dist: 6.9, lev: 25.1, pd: -5.5, ret1y: 13.8, ret90d: 4.2, vol1y: 16.2, unii: 0.28, distCov: 1.05, strategy: "US REIT income with moderate leverage" }),
+  bc("JRS", "Nuveen Real Estate Income Fund", 8.07, 24239, "reit", { aum: 0.8, dist: 7.4, lev: 22, pd: -6.8, ret1y: 11.2, ret90d: 3.4, vol1y: 15.8, unii: 0.10, distCov: 0.98, strategy: "Diversified REIT income" }),
+  bc("RA", "Brookfield Real Assets Income Fund", 13.57, 99970, "reit", { aum: 1.4, dist: 9.2, lev: 28, pd: -4.2, ret1y: 10.8, ret90d: 2.8, vol1y: 13.6, unii: 0.02, distCov: 0.92, strategy: "Real assets including REITs, infrastructure, and real estate debt" }),
+
+  // Multi-Asset
+  bc("BOE", "BlackRock Enhanced Global Dividend Trust", 11.91, 40625, "multi-asset", { aum: 1.2, dist: 6.5, lev: 22, pd: -5.0, ret1y: 8.0, ret90d: 2.0, vol1y: 18.0, unii: 0.08, distCov: 0.95, strategy: "Global multi-asset income with leverage" }),
+  bc("EOD", "Allspring Global Dividend Opportunity Fund", 6.14, 88016, "multi-asset", { aum: 0.8, dist: 8.8, lev: 18, pd: -9.4, ret1y: 9.4, ret90d: 2.4, vol1y: 14.6, unii: 0.06, distCov: 0.92, strategy: "Global dividend opportunities across asset classes" }),
+  bc("CHW", "Calamos Global Dynamic Income Fund", 8.08, 65252, "multi-asset", { aum: 0.9, dist: 9.2, lev: 24, pd: -7.8, ret1y: 10.6, ret90d: 2.6, vol1y: 15.2, unii: -0.04, distCov: 0.88, strategy: "Global dynamic income with convertibles and equity" }),
+  bc("NMAI", "Nuveen Multi-Asset Income Fund", 13.64, 9010, "multi-asset", { aum: 0.6, dist: 8.4, lev: 22, pd: -5.2, ret1y: 9.8, ret90d: 2.2, vol1y: 11.4, unii: 0.04, distCov: 0.96, strategy: "Multi-asset income across equity, credit, and real assets" }),
+  bc("BCV", "Bancroft Fund Ltd", 23.27, 5290, "multi-asset", { aum: 0.2, dist: 4.8, lev: 0, pd: -10.4, ret1y: 12.8, ret90d: 3.2, vol1y: 14.2, unii: 0.18, distCov: 1.25, strategy: "Convertible securities focused" }),
+  bc("HGLB", "Highland Global Allocation Fund", 8.945, 11548, "multi-asset", { aum: 0.2, dist: 9.2, lev: 0, pd: -18.4, ret1y: 6.8, ret90d: 1.8, vol1y: 16.2, unii: -0.12, distCov: 0.78, strategy: "Global allocation with alternative assets" }),
+  bc("SABA", "Saba Capital Income & Opportunities Fund II", 8.01, 17796, "multi-asset", { aum: 0.4, dist: 7.6, lev: 0, pd: -4.2, ret1y: 8.4, ret90d: 2.0, vol1y: 10.4, unii: 0.08, distCov: 1.04, strategy: "Activist-driven closed-end fund arbitrage" }),
+  bc("NCZ", "Virtus Convertible & Income Fund II", 14.845, 15662, "multi-asset", { aum: 0.6, dist: 9.6, lev: 26, pd: -6.2, ret1y: 10.2, ret90d: 2.6, vol1y: 13.8, unii: -0.02, distCov: 0.90, strategy: "Convertible securities and high yield income" }),
+  bc("NIE", "Virtus Equity & Convertible Income Fund", 25.434, 32155, "multi-asset", { aum: 0.8, dist: 7.8, lev: 0, pd: -4.6, ret1y: 12.4, ret90d: 3.4, vol1y: 14.4, unii: 0.10, distCov: 1.02, strategy: "Equity and convertible securities income" }),
+  bc("ZTR", "Virtus Total Return Fund Inc", 6.86, 46541, "multi-asset", { aum: 0.4, dist: 10.4, lev: 22, pd: -8.8, ret1y: 8.6, ret90d: 2.2, vol1y: 13.2, unii: -0.06, distCov: 0.84, strategy: "Multi-asset total return with leverage" }),
+  bc("BGX", "Blackstone Long-Short Credit Income Fund", 11.24, 24857, "multi-asset", { aum: 0.6, dist: 8.6, lev: 20, pd: -5.4, ret1y: 9.2, ret90d: 2.0, vol1y: 10.8, unii: 0.04, distCov: 0.96, strategy: "Long-short credit with income focus" }),
+  bc("BSTZ", "BlackRock Science & Technology Trust II", 23.01, 12418, "multi-asset", { aum: 0.8, dist: 7.4, lev: 0, pd: -6.8, ret1y: 16.4, ret90d: 4.6, vol1y: 19.8, unii: 0.02, distCov: 0.88, strategy: "Science and technology equity with options overlay" }),
+  bc("RMT", "Royce Micro-Cap Trust", 12.09, 60804, "multi-asset", { aum: 0.5, dist: 5.6, lev: 0, pd: -12.2, ret1y: 10.4, ret90d: 2.8, vol1y: 18.6, unii: 0.14, distCov: 1.08, strategy: "Micro-cap equity value" }),
+  bc("RVT", "Royce Value Trust", 18.52, 92097, "multi-asset", { aum: 1.2, dist: 5.8, lev: 0, pd: -10.8, ret1y: 11.8, ret90d: 3.2, vol1y: 17.4, unii: 0.16, distCov: 1.12, strategy: "Small-cap equity value" }),
+  bc("NBXG", "Neuberger Berman Next Gen Connectivity Fund", 13.37, 59713, "multi-asset", { aum: 0.6, dist: 8.2, lev: 0, pd: -8.4, ret1y: 14.2, ret90d: 4.0, vol1y: 18.8, unii: 0.02, distCov: 0.86, strategy: "Next generation connectivity and 5G technology" }),
+  bc("PDT", "John Hancock Premium Dividend Fund", 13.28, 31591, "multi-asset", { aum: 1.0, dist: 7.4, lev: 24, pd: -6.2, ret1y: 10.8, ret90d: 2.6, vol1y: 12.4, unii: 0.08, distCov: 0.98, strategy: "Premium dividend equity and preferred income" }),
+].map(buildCEF)
 
 export const cefByTicker: Record<string, CEFProfile> = Object.fromEntries(
   cefUniverse.map(p => [p.overview.ticker, p])
 )
 
-export const CORE_TICKERS = core10.map(p => p.overview.ticker)
-
 export const ALL_TICKERS = cefUniverse.map(p => p.overview.ticker)
 
 // ─── 5-Pillar Scoring Engine ────────────────────────────────────────────────
-// Weights: Yield Quality 25%, Discount Attractiveness 25%,
-// Hercules X-Ray Stability 20%, Risk & Liquidity 15%, Momentum & Regime 15%
-// PSI is computed on NAV return distributions (baseline 365d vs recent 90d).
-// CSV Z-scores (z_yield, z_premium, z_vol, z_return) feed into pillar sub-scores.
-
-// ── Helpers ──
 
 function zscoreArray(vals: number[]): number[] {
   const mean = vals.reduce((a, b) => a + b, 0) / vals.length
@@ -623,7 +434,6 @@ function zscoreArray(vals: number[]): number[] {
   return vals.map(v => (v - mean) / std)
 }
 
-/** Min-max normalize to [0,1] */
 function minmax(vals: number[]): number[] {
   const mn = Math.min(...vals)
   const mx = Math.max(...vals)
@@ -632,8 +442,6 @@ function minmax(vals: number[]): number[] {
 }
 
 function clamp01(v: number): number { return Math.max(0, Math.min(1, v)) }
-
-// ── Step 1: Filters ──
 
 function applyFilters(p: CEFProfile): { passes: boolean; reasons: string[] } {
   const reasons: string[] = []
@@ -645,8 +453,6 @@ function applyFilters(p: CEFProfile): { passes: boolean; reasons: string[] } {
   if (daysSince > 90) reasons.push(`Holdings ${daysSince}d stale (>90d)`)
   return { passes: reasons.length === 0, reasons }
 }
-
-// ── Step 2: Extract 4 CSV metrics & Z-score them ──
 
 function extractMetrics(p: CEFProfile): FundMetricVector {
   return {
@@ -663,7 +469,6 @@ function computeZScores(profiles: CEFProfile[]): { zScores: ZScoreVector[]; metr
   const zPremiums = zscoreArray(metrics.map(m => m.avgPremiumDiscount))
   const zVols = zscoreArray(metrics.map(m => m.realizedVol))
   const zReturns = zscoreArray(metrics.map(m => m.return1Y))
-
   const zScores: ZScoreVector[] = metrics.map((_, i) => ({
     zYield: parseFloat(zYields[i].toFixed(4)),
     zPremium: parseFloat(zPremiums[i].toFixed(4)),
@@ -673,8 +478,6 @@ function computeZScores(profiles: CEFProfile[]): { zScores: ZScoreVector[]; metr
   }))
   return { zScores, metrics }
 }
-
-// ── Step 3: PSI ──
 
 function computePSI(profile: CEFProfile): PSIResult {
   const navHist = profile.navHistory
@@ -707,10 +510,7 @@ function computePSI(profile: CEFProfile): PSIResult {
   return { psi: parseFloat(psi.toFixed(4)), significantBins, totalBins: numBins, regime }
 }
 
-// ── Step 4: Compute 5 Pillar scores per fund ──
-
 function computePillarScores(profiles: CEFProfile[], zScores: ZScoreVector[], psiResults: PSIResult[]): PillarScores[] {
-  // Pre-compute cross-universe normalized arrays
   const distCovs = profiles.map(p => p.overview.distributionCoverage)
   const uniis = profiles.map(p => p.overview.unii)
   const levAdjYields = profiles.map(p => p.overview.distributionRate / (1 + p.overview.leverageRatio / 100))
@@ -718,21 +518,16 @@ function computePillarScores(profiles: CEFProfile[], zScores: ZScoreVector[], ps
   const nUnii = minmax(uniis)
   const nLevAdjYield = minmax(levAdjYields)
 
-  // Discount: deeper discount = more attractive (negate P/D)
   const negPDs = profiles.map(p => -p.overview.premiumDiscount)
   const pdVols = profiles.map(p => p.risk.volatility90d > 0 ? 1 / p.risk.volatility90d : 0.5)
-  const meanRevProbs = profiles.map(p => {
-    const zDisc = p.risk.zScoreDiscount
-    return clamp01((zDisc + 3) / 6) // map z from [-3,3] to [0,1]
-  })
+  const meanRevProbs = profiles.map(p => clamp01((p.risk.zScoreDiscount + 3) / 6))
   const nNegPD = minmax(negPDs)
   const nPDVol = minmax(pdVols)
   const nMeanRev = minmax(meanRevProbs)
 
-  // X-Ray Stability: holdings freshness, factor drift, leverage stability, residual
   const freshness = profiles.map(p => {
     const days = Math.floor((Date.now() - new Date(p.overview.holdingsDate).getTime()) / 86400000)
-    return clamp01(1 - days / 180) // fresh = 1, 180d stale = 0
+    return clamp01(1 - days / 180)
   })
   const driftStab = profiles.map(p =>
     p.driftRegime.currentRegime === "stable" ? 1 : p.driftRegime.currentRegime === "transitioning" ? 0.5 : 0
@@ -743,7 +538,6 @@ function computePillarScores(profiles: CEFProfile[], zScores: ZScoreVector[], ps
   const nDrift = minmax(driftStab)
   const nLevStab = minmax(levStab)
 
-  // Risk & Liquidity: lower vol = better, shallower drawdown = better, higher ADV = better
   const invVols = profiles.map(p => 1 / (p.performance.volatility1Y || 1))
   const invDD = profiles.map(p => 1 / (Math.abs(p.performance.maxDrawdown1Y) || 1))
   const advs = profiles.map(p => p.overview.adv)
@@ -751,32 +545,19 @@ function computePillarScores(profiles: CEFProfile[], zScores: ZScoreVector[], ps
   const nInvDD = minmax(invDD)
   const nAdv = minmax(advs)
 
-  // Momentum & Regime: 90d return, sector regime alignment via PSI stability
   const mom90 = profiles.map(p => p.overview.return90d)
   const regimeFit = psiResults.map(r => r.regime === "stable" ? 1 : r.regime === "shifting" ? 0.5 : 0)
   const nMom90 = minmax(mom90)
   const nRegime = minmax(regimeFit)
 
   return profiles.map((_, i) => ({
-    yieldQuality: parseFloat((
-      0.40 * nDistCov[i] + 0.30 * nUnii[i] + 0.30 * nLevAdjYield[i]
-    ).toFixed(4)),
-    discountAttractiveness: parseFloat((
-      0.45 * nNegPD[i] + 0.25 * nPDVol[i] + 0.30 * nMeanRev[i]
-    ).toFixed(4)),
-    xrayStability: parseFloat((
-      0.25 * nFresh[i] + 0.30 * nDrift[i] + 0.25 * nLevStab[i] + 0.20 * residStab[i]
-    ).toFixed(4)),
-    riskLiquidity: parseFloat((
-      0.40 * nInvVol[i] + 0.30 * nInvDD[i] + 0.30 * nAdv[i]
-    ).toFixed(4)),
-    momentumRegime: parseFloat((
-      0.60 * nMom90[i] + 0.40 * nRegime[i]
-    ).toFixed(4)),
+    yieldQuality: parseFloat((0.40 * nDistCov[i] + 0.30 * nUnii[i] + 0.30 * nLevAdjYield[i]).toFixed(4)),
+    discountAttractiveness: parseFloat((0.45 * nNegPD[i] + 0.25 * nPDVol[i] + 0.30 * nMeanRev[i]).toFixed(4)),
+    xrayStability: parseFloat((0.25 * nFresh[i] + 0.30 * nDrift[i] + 0.25 * nLevStab[i] + 0.20 * residStab[i]).toFixed(4)),
+    riskLiquidity: parseFloat((0.40 * nInvVol[i] + 0.30 * nInvDD[i] + 0.30 * nAdv[i]).toFixed(4)),
+    momentumRegime: parseFloat((0.60 * nMom90[i] + 0.40 * nRegime[i]).toFixed(4)),
   }))
 }
-
-// ── Step 5: Aggregate score = weighted sum of pillars ──
 
 function computeWeightedScore(pillars: PillarScores): number {
   let score = 0
@@ -786,19 +567,15 @@ function computeWeightedScore(pillars: PillarScores): number {
   return parseFloat(score.toFixed(4))
 }
 
-// ── Step 6: Full ranking pipeline ──
-
 export function computeRankings(profiles: CEFProfile[]): FundRanking[] {
   const { zScores, metrics } = computeZScores(profiles)
   const psiResults = profiles.map(computePSI)
   const filters = profiles.map(applyFilters)
   const pillarScores = computePillarScores(profiles, zScores, psiResults)
-
   const composites = zScores.map(z => z.compositeZ)
   const psis = psiResults.map(p => p.psi)
   const nComposites = minmax(composites)
   const nPsis = minmax(psis)
-
   const rankings: FundRanking[] = profiles.map((p, i) => ({
     ticker: p.overview.ticker,
     metrics: metrics[i],
@@ -813,11 +590,9 @@ export function computeRankings(profiles: CEFProfile[]): FundRanking[] {
     passesFilter: filters[i].passes,
     filterReasons: filters[i].reasons,
   }))
-
   rankings.sort((a, b) => b.score - a.score)
   rankings.forEach((r, i) => { r.rank = i + 1 })
   return rankings
 }
 
-// Pre-computed rankings for use in components
 export const fundRankings = computeRankings(cefUniverse)
