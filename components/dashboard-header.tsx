@@ -1,7 +1,7 @@
 "use client"
 
 import type { CEFProfile } from "@/lib/cef-universe"
-import { TrendingDown, TrendingUp, Activity } from "lucide-react"
+import { TrendingDown, TrendingUp, Activity, Clock } from "lucide-react"
 
 interface Props {
   profile: CEFProfile
@@ -20,17 +20,17 @@ export function DashboardHeader({ profile, fundCount, totalAum, viewMode }: Prop
   const o = profile.overview
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-card px-6 py-4">
-      <div className="flex items-center gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/20">
-          <Activity className="h-5 w-5 text-primary" />
+    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-card px-6 py-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/20">
+          <Activity className="h-4.5 w-4.5 text-primary" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-foreground">
+          <h1 className="text-base font-bold text-foreground tracking-tight">
             CEF X-Ray Dashboard
           </h1>
-          <p className="text-xs text-muted-foreground">
-            {fundCount} closed-end funds | ${totalAum.toFixed(1)}B combined AUM | {viewLabels[viewMode] ?? ""}
+          <p className="text-[10px] text-muted-foreground">
+            {fundCount} funds | ${totalAum.toFixed(1)}B AUM | {viewLabels[viewMode] ?? ""}
           </p>
         </div>
       </div>
@@ -40,13 +40,13 @@ export function DashboardHeader({ profile, fundCount, totalAum, viewMode }: Prop
           <>
             <div className="flex flex-col items-end gap-0.5">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-base font-bold text-primary">{o.ticker}</span>
-                <span className="text-xs text-muted-foreground">{o.category}</span>
+                <span className="font-mono text-sm font-bold text-primary">{o.ticker}</span>
+                <span className="rounded bg-secondary px-1.5 py-0.5 text-[9px] text-muted-foreground capitalize">{o.category.replace("-", " ")}</span>
               </div>
-              <span className="max-w-[260px] truncate text-[10px] text-muted-foreground">{o.name}</span>
+              <span className="max-w-[240px] truncate text-[10px] text-muted-foreground">{o.name}</span>
             </div>
-            <div className="hidden h-8 w-px bg-border md:block" />
-            <div className="hidden gap-4 text-xs md:flex">
+            <div className="hidden h-7 w-px bg-border md:block" />
+            <div className="hidden gap-3 text-xs md:flex">
               <MetricPill label="NAV" value={`$${o.navPerShare.toFixed(2)}`} />
               <MetricPill label="Price" value={`$${o.marketPrice.toFixed(2)}`} />
               <MetricPill
@@ -60,9 +60,12 @@ export function DashboardHeader({ profile, fundCount, totalAum, viewMode }: Prop
             </div>
           </>
         )}
-        <div className="flex flex-col items-end">
-          <span className="text-[9px] uppercase text-muted-foreground">As of</span>
-          <span className="font-mono text-xs text-foreground">2026-02-17</span>
+        <div className="flex items-center gap-1.5 rounded-md bg-secondary/50 px-2.5 py-1.5">
+          <Clock className="h-3 w-3 text-muted-foreground" />
+          <div className="flex flex-col">
+            <span className="text-[8px] uppercase tracking-wider text-muted-foreground">As of</span>
+            <span className="font-mono text-[11px] text-foreground">2026-02-17</span>
+          </div>
         </div>
       </div>
     </header>
@@ -72,8 +75,8 @@ export function DashboardHeader({ profile, fundCount, totalAum, viewMode }: Prop
 function MetricPill({ label, value, icon, valueClass }: { label: string; value: string; icon?: React.ReactNode; valueClass?: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</span>
-      <span className={`flex items-center gap-1 font-mono text-sm font-medium ${valueClass || "text-foreground"}`}>
+      <span className="text-[8px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className={`flex items-center gap-1 font-mono text-xs font-medium ${valueClass || "text-foreground"}`}>
         {icon}
         {value}
       </span>

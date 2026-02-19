@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from "react"
 import type { CEFProfile } from "@/lib/cef-universe"
-import { TrendingDown, TrendingUp, Search } from "lucide-react"
+import { fundRankings } from "@/lib/cef-universe"
+import { Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 
 const CATEGORIES = ["all", "equity", "fixed-income", "infrastructure", "reit", "multi-asset"] as const
@@ -28,7 +29,9 @@ export function CefSelector({ funds, selectedTicker, onSelect }: Props) {
         f.overview.sponsor.toLowerCase().includes(q)
       )
     }
-    return list
+    // Sort by ranking
+    const rankMap = new Map(fundRankings.map(r => [r.ticker, r.rank]))
+    return [...list].sort((a, b) => (rankMap.get(a.overview.ticker) ?? 999) - (rankMap.get(b.overview.ticker) ?? 999))
   }, [funds, search, category])
 
   return (
@@ -42,34 +45,38 @@ export function CefSelector({ funds, selectedTicker, onSelect }: Props) {
             placeholder="Search ticker, name, sponsor..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="h-8 pl-8 text-xs bg-card"
+            className="h-7 pl-8 text-xs bg-card"
           />
         </div>
         <div className="flex gap-1 overflow-x-auto">
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className={`shrink-0 rounded-md px-2.5 py-1 text-[10px] font-medium capitalize transition-colors ${
-                category === cat
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {cat === "all" ? `All (${funds.length})` : cat.replace("-", " ")}
-            </button>
-          ))}
+          {CATEGORIES.map(cat => {
+            const count = cat === "all" ? funds.length : funds.filter(f => f.overview.category === cat).length
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                className={`shrink-0 rounded-md px-2 py-1 text-[10px] font-medium capitalize transition-colors ${
+                  category === cat
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {cat === "all" ? "All" : cat.replace("-", " ")} ({count})
+              </button>
+            )
+          })}
         </div>
-        <span className="hidden text-[10px] text-muted-foreground sm:inline">
-          {filtered.length} fund{filtered.length !== 1 ? "s" : ""}
+        <span className="hidden text-[10px] text-muted-foreground sm:inline whitespace-nowrap">
+          {filtered.length} of {funds.length}
         </span>
       </div>
 
-      {/* Fund Chips */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1" role="listbox" aria-label="Fund selector">
+      {/* Compact Fund Chips -- sorted by rank */}
+      <div className="flex gap-1 overflow-x-auto pb-0.5" role="listbox" aria-label="Fund selector">
         {filtered.map((fund) => {
           const o = fund.overview
           const isSelected = o.ticker === selectedTicker
+          const rank = fundRankings.find(r => r.ticker === o.ticker)
 
           return (
             <button
@@ -77,29 +84,28 @@ export function CefSelector({ funds, selectedTicker, onSelect }: Props) {
               role="option"
               aria-selected={isSelected}
               onClick={() => onSelect(o.ticker)}
-              className={`flex shrink-0 flex-col gap-0.5 rounded-lg border px-3 py-2 text-left transition-all ${
+              className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1.5 text-left transition-all ${
                 isSelected
                   ? "border-primary bg-primary/10"
                   : "border-border bg-card hover:border-primary/30"
               }`}
             >
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono text-xs font-bold text-foreground">{o.ticker}</span>
-                <span className={`font-mono text-[10px] ${o.premiumDiscount >= 0 ? "text-success" : "text-destructive"}`}>
-                  {o.premiumDiscount >= 0 ? "+" : ""}{o.premiumDiscount.toFixed(1)}%
+              {rank && (
+                <span className={`font-mono text-[9px] font-bold ${
+                  rank.rank <= 5 ? "text-primary" : rank.rank <= 15 ? "text-accent" : "text-muted-foreground"
+                }`}>
+                  {rank.rank}
                 </span>
-                {o.premiumDiscount >= 0 ? (
-                  <TrendingUp className="h-2.5 w-2.5 text-success" />
-                ) : (
-                  <TrendingDown className="h-2.5 w-2.5 text-destructive" />
-                )}
-              </div>
-              <span className="text-[9px] text-muted-foreground">{o.distributionRate}% dist</span>
+              )}
+              <span className="font-mono text-[11px] font-bold text-foreground">{o.ticker}</span>
+              <span className={`font-mono text-[9px] ${o.premiumDiscount >= 0 ? "text-success" : "text-destructive"}`}>
+                {o.premiumDiscount >= 0 ? "+" : ""}{o.premiumDiscount.toFixed(1)}%
+              </span>
             </button>
           )
         })}
         {filtered.length === 0 && (
-          <span className="px-4 py-2 text-xs text-muted-foreground">No funds match filter</span>
+          <span className="px-4 py-1.5 text-xs text-muted-foreground">No funds match</span>
         )}
       </div>
     </div>
