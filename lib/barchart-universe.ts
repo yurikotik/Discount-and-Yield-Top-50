@@ -218,4 +218,28 @@ export const barchartSeeds: BarchartFundSeed[] = [
   // Activist / Special Situations
   bc("SABA", "Saba Capital Income & Opportunities Fund II", 8.01, 62300, "multi-asset", { aum: 0.4, dist: 7.8, lev: 0, pd: -6.4, ret1y: 8.8, ret90d: 2.0, vol1y: 11.4, unii: 0.04, distCov: 0.96, strategy: "Credit and special situations with activist overlay" }),
 
+  // ─── Additional tickers from Python watchlist (9) ────────────────────────────
+  // BCV, BFZ, DHF, ETJ, HGLB, CAF, DIAX, HQL, HIO
+
+  // Municipal / Fixed Income
+  bc("BCV", "Bancroft Fund Ltd", 18.42, 22400, "multi-asset", { aum: 0.2, dist: 5.2, lev: 0, pd: -12.8, ret1y: 10.4, ret90d: 2.6, vol1y: 13.2, unii: 0.18, distCov: 1.22, strategy: "Convertible securities and equity" }),
+  bc("BFZ", "BlackRock California Municipal Income Trust", 11.28, 89500, "fixed-income", { aum: 0.4, dist: 5.6, lev: 36, pd: -6.2, ret1y: 4.8, ret90d: 1.0, vol1y: 10.2, unii: 0.04, distCov: 1.08, strategy: "California municipal bonds with leverage", sectorWeights: muniSectors }),
+  bc("DHF", "Dreyfus Municipal Bond Infrastructure Fund", 10.95, 35200, "fixed-income", { aum: 0.3, dist: 4.8, lev: 28, pd: -5.8, ret1y: 4.2, ret90d: 0.8, vol1y: 9.8, unii: 0.06, distCov: 1.12, strategy: "Municipal bond infrastructure focus", sectorWeights: muniSectors }),
+
+  // Equity / Covered Call
+  bc("ETJ", "Eaton Vance Risk-Managed Diversified Equity Income Fund", 9.84, 156200, "equity", { aum: 1.1, dist: 8.4, lev: 0, pd: -4.2, ret1y: 13.8, ret90d: 3.4, vol1y: 12.6, unii: 0.08, distCov: 1.02, strategy: "Risk-managed equity income with options overlay" }),
+  bc("DIAX", "Nuveen Dow 30 Dynamic Overwrite Fund", 16.88, 48700, "equity", { aum: 0.6, dist: 7.2, lev: 0, pd: -3.6, ret1y: 12.2, ret90d: 3.0, vol1y: 12.2, unii: 0.12, distCov: 1.08, strategy: "Dow 30 equity with dynamic covered call overlay" }),
+
+  // Healthcare / Life Sciences
+  bc("HQL", "Tekla Life Sciences Investors", 15.62, 142800, "equity", { aum: 0.9, dist: 7.8, lev: 0, pd: -11.4, ret1y: 14.8, ret90d: 4.2, vol1y: 19.2, unii: 0.02, distCov: 0.88, strategy: "Life sciences and biotechnology equity" }),
+
+  // Global / Multi-Asset
+  bc("HGLB", "Highland Global Allocation Fund", 8.24, 68400, "multi-asset", { aum: 0.3, dist: 9.6, lev: 18, pd: -8.6, ret1y: 7.8, ret90d: 1.8, vol1y: 14.6, unii: -0.14, distCov: 0.78, strategy: "Global allocation across asset classes" }),
+
+  // Emerging Markets / International
+  bc("CAF", "Morgan Stanley China A Share Fund", 14.78, 45600, "equity", { aum: 0.5, dist: 1.2, lev: 0, pd: -18.2, ret1y: 8.4, ret90d: 4.8, vol1y: 22.8, unii: 0.28, distCov: 1.65, strategy: "China A-share equity" }),
+
+  // Fixed Income / High Yield
+  bc("HIO", "Western Asset High Income Opportunity Fund", 4.12, 312500, "fixed-income", { aum: 0.9, dist: 9.2, lev: 26, pd: -6.4, ret1y: 8.2, ret90d: 2.0, vol1y: 10.6, unii: -0.04, distCov: 0.94, strategy: "High income corporate bonds" }),
+
 ]

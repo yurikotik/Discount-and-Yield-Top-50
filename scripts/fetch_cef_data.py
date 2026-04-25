@@ -11,7 +11,11 @@ from requests.adapters import HTTPAdapter, Retry
 
 warnings.filterwarnings("ignore")
 
+# Full 59-ticker CEF universe (Core 10 + 49 additional)
 UNIVERSE = [
+    # Core 10 from dashboard
+    "UTF", "PDI", "RQI", "PTY", "GOF", "EOS", "STK", "UTG", "DNP",
+    # Original watchlist (50 tickers, minus USA which is already in core conceptually)
     "BOE", "PEO", "EOD", "BCV", "BFZ", "BSTZ", "BGX", "DHF", "BWG", "RA",
     "CHW", "DSL", "ETJ", "EFR", "EVT", "ETW", "ETV", "FFA", "GDV", "GNT",
     "GAM", "HGLB", "PDT", "USA", "ASG", "CAF", "EDD", "DIAX", "JGH", "NMAI",
@@ -21,6 +25,17 @@ UNIVERSE = [
 
 # Optional: hard-coded names to avoid yfinance.info
 TICKER_NAME_MAP = {
+    # Core 10 funds
+    "UTF": "Cohen & Steers Infrastructure Fund",
+    "PDI": "PIMCO Dynamic Income Fund",
+    "RQI": "Cohen & Steers Quality Income Realty Fund",
+    "PTY": "PIMCO Corporate & Income Opportunity Fund",
+    "GOF": "Guggenheim Strategic Opportunities Fund",
+    "EOS": "Eaton Vance Enhanced Equity Income Fund II",
+    "STK": "Columbia Seligman Premium Technology Growth Fund",
+    "UTG": "Reaves Utility Income Fund",
+    "DNP": "DNP Select Income Fund",
+    # Additional funds
     "USA": "Liberty All-Star Equity Fund",
     "RVT": "Royce Value Trust",
     "RMT": "Royce Micro-Cap Trust",

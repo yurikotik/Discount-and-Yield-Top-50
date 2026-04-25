@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 
-// CEF Universe - 50 tickers
+// CEF Universe - 59 tickers (Core 10 + 49 additional)
 const UNIVERSE = [
+  // Core 10 from dashboard
+  "UTF", "PDI", "RQI", "PTY", "GOF", "EOS", "STK", "UTG", "DNP",
+  // Additional watchlist tickers
   "BOE", "PEO", "EOD", "BCV", "BFZ", "BSTZ", "BGX", "DHF", "BWG", "RA",
   "CHW", "DSL", "ETJ", "EFR", "EVT", "ETW", "ETV", "FFA", "GDV", "GNT",
   "GAM", "HGLB", "PDT", "USA", "ASG", "CAF", "EDD", "DIAX", "JGH", "NMAI",
@@ -11,6 +14,17 @@ const UNIVERSE = [
 
 // Human-readable fund names
 const TICKER_NAME_MAP: Record<string, string> = {
+  // Core 10 funds
+  "UTF": "Cohen & Steers Infrastructure Fund",
+  "PDI": "PIMCO Dynamic Income Fund",
+  "RQI": "Cohen & Steers Quality Income Realty Fund",
+  "PTY": "PIMCO Corporate & Income Opportunity Fund",
+  "GOF": "Guggenheim Strategic Opportunities Fund",
+  "EOS": "Eaton Vance Enhanced Equity Income Fund II",
+  "STK": "Columbia Seligman Premium Technology Growth Fund",
+  "UTG": "Reaves Utility Income Fund",
+  "DNP": "DNP Select Income Fund",
+  // Additional funds
   "USA": "Liberty All-Star Equity Fund",
   "RVT": "Royce Value Trust",
   "RMT": "Royce Micro-Cap Trust",
