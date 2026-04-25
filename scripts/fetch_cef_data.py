@@ -1,7 +1,9 @@
 import os
+import json
 import warnings
 from datetime import datetime
 from time import sleep
+from getpass import getpass
 
 import pandas as pd
 import requests
@@ -10,6 +12,12 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter, Retry
 
 warnings.filterwarnings("ignore")
+
+# CEFConnect API endpoints
+CEFCONNECT_BASE_URL = "https://www.cefconnect.com"
+CEFCONNECT_LOGIN_URL = f"{CEFCONNECT_BASE_URL}/api/v3/account/login"
+CEFCONNECT_PORTFOLIO_URL = f"{CEFCONNECT_BASE_URL}/api/v3/portfolio"
+CEFCONNECT_PORTFOLIO_HOLDINGS_URL = f"{CEFCONNECT_BASE_URL}/api/v3/portfolio/holdings"
 
 # Pensionizer Top 50 Index - exact tickers from Barchart watchlist (04-25-2026)
 UNIVERSE = [
@@ -82,7 +90,7 @@ def make_session():
         total=3,
         backoff_factor=0.5,
         status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["GET"],
+        allowed_methods=["GET", "POST"],
     )
     adapter = HTTPAdapter(max_retries=retries)
     s.mount("https://", adapter)
@@ -93,10 +101,216 @@ def make_session():
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/122.0 Safari/537.36"
-            )
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Origin": CEFCONNECT_BASE_URL,
+            "Referer": f"{CEFCONNECT_BASE_URL}/",
         }
     )
     return s
+
+
+def cefconnect_login(session, email=None, password=None):
+    """
+    Authenticate with CEFConnect and return session with auth cookies.
+    
+    If email/password not provided, will prompt interactively or check env vars:
+      - CEFCONNECT_EMAIL
+      - CEFCONNECT_PASSWORD
+    
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    # Get credentials from params, env vars, or prompt
+    if email is None:
+        email = os.environ.get("CEFCONNECT_EMAIL")
+        if email is None:
+            email = input("CEFConnect Email: ").strip()
+    
+    if password is None:
+        password = os.environ.get("CEFCONNECT_PASSWORD")
+        if password is None:
+            password = getpass("CEFConnect Password: ")
+    
+    if not email or not password:
+        return False, "Email and password are required"
+    
+    print(f"Logging in to CEFConnect as {email}...")
+    
+    # First, get the login page to obtain any CSRF tokens
+    try:
+        login_page = session.get(f"{CEFCONNECT_BASE_URL}/Account/Login", timeout=10)
+        
+        # Try to extract CSRF token if present
+        soup = BeautifulSoup(login_page.text, "html.parser")
+        csrf_token = None
+        csrf_input = soup.find("input", {"name": "__RequestVerificationToken"})
+        if csrf_input:
+            csrf_token = csrf_input.get("value")
+        
+        # Prepare login payload
+        login_data = {
+            "email": email,
+            "password": password,
+            "rememberMe": True,
+        }
+        
+        # Add CSRF token if found
+        if csrf_token:
+            login_data["__RequestVerificationToken"] = csrf_token
+            session.headers["X-CSRF-TOKEN"] = csrf_token
+        
+        # Try API login first
+        session.headers["Content-Type"] = "application/json"
+        response = session.post(
+            CEFCONNECT_LOGIN_URL,
+            json=login_data,
+            timeout=15,
+        )
+        
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                if data.get("success") or data.get("isAuthenticated"):
+                    print("  Login successful via API!")
+                    return True, "Logged in successfully"
+            except json.JSONDecodeError:
+                pass
+        
+        # Fallback: try form-based login
+        session.headers["Content-Type"] = "application/x-www-form-urlencoded"
+        form_data = {
+            "Email": email,
+            "Password": password,
+            "RememberMe": "true",
+        }
+        if csrf_token:
+            form_data["__RequestVerificationToken"] = csrf_token
+        
+        response = session.post(
+            f"{CEFCONNECT_BASE_URL}/Account/Login",
+            data=form_data,
+            timeout=15,
+            allow_redirects=True,
+        )
+        
+        # Check if login succeeded by looking for authenticated indicators
+        if response.status_code == 200:
+            if "logout" in response.text.lower() or "sign out" in response.text.lower():
+                print("  Login successful via form!")
+                return True, "Logged in successfully"
+            elif "invalid" in response.text.lower() or "incorrect" in response.text.lower():
+                return False, "Invalid email or password"
+        
+        # Check cookies for auth indicators
+        auth_cookies = [c for c in session.cookies if "auth" in c.name.lower() or "session" in c.name.lower()]
+        if auth_cookies:
+            print("  Login appears successful (auth cookies present)")
+            return True, "Logged in successfully"
+        
+        return False, f"Login failed with status {response.status_code}"
+        
+    except requests.exceptions.Timeout:
+        return False, "Login request timed out"
+    except requests.exceptions.RequestException as e:
+        return False, f"Login request failed: {e}"
+
+
+def fetch_cefconnect_portfolio(session):
+    """
+    Fetch portfolio holdings from CEFConnect (requires authentication).
+    
+    Returns:
+        tuple: (holdings: list[dict], error: str or None)
+    """
+    print("Fetching CEFConnect portfolio...")
+    
+    try:
+        # Try the portfolio API endpoint
+        response = session.get(CEFCONNECT_PORTFOLIO_HOLDINGS_URL, timeout=15)
+        
+        if response.status_code == 401:
+            return [], "Not authenticated - please login first"
+        
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                if isinstance(data, list):
+                    print(f"  Found {len(data)} holdings in portfolio")
+                    return data, None
+                elif isinstance(data, dict) and "holdings" in data:
+                    holdings = data["holdings"]
+                    print(f"  Found {len(holdings)} holdings in portfolio")
+                    return holdings, None
+                elif isinstance(data, dict) and "funds" in data:
+                    holdings = data["funds"]
+                    print(f"  Found {len(holdings)} holdings in portfolio")
+                    return holdings, None
+            except json.JSONDecodeError:
+                pass
+        
+        # Try scraping the portfolio page directly
+        response = session.get(f"{CEFCONNECT_BASE_URL}/closed-end-funds-portfolio", timeout=15)
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            
+            # Look for portfolio table
+            holdings = []
+            table = soup.find("table", class_=lambda x: x and "portfolio" in x.lower()) or soup.find("table")
+            
+            if table:
+                rows = table.find_all("tr")
+                for row in rows[1:]:  # Skip header
+                    cells = row.find_all(["td", "th"])
+                    if len(cells) >= 2:
+                        # Try to extract ticker and other data
+                        ticker_cell = cells[0]
+                        ticker_link = ticker_cell.find("a")
+                        ticker = ticker_link.get_text(strip=True) if ticker_link else ticker_cell.get_text(strip=True)
+                        
+                        if ticker and len(ticker) <= 5:  # Valid ticker length
+                            holding = {"ticker": ticker.upper()}
+                            
+                            # Extract additional columns if available
+                            if len(cells) > 1:
+                                holding["name"] = cells[1].get_text(strip=True) if len(cells) > 1 else ""
+                            if len(cells) > 2:
+                                holding["shares"] = cells[2].get_text(strip=True) if len(cells) > 2 else ""
+                            if len(cells) > 3:
+                                holding["price"] = cells[3].get_text(strip=True) if len(cells) > 3 else ""
+                            if len(cells) > 4:
+                                holding["nav"] = cells[4].get_text(strip=True) if len(cells) > 4 else ""
+                            if len(cells) > 5:
+                                holding["discount"] = cells[5].get_text(strip=True) if len(cells) > 5 else ""
+                            
+                            holdings.append(holding)
+                
+                if holdings:
+                    print(f"  Scraped {len(holdings)} holdings from portfolio page")
+                    return holdings, None
+            
+            # Check if redirected to login
+            if "login" in response.url.lower():
+                return [], "Session expired - please login again"
+        
+        return [], f"Could not fetch portfolio (status {response.status_code})"
+        
+    except requests.exceptions.Timeout:
+        return [], "Portfolio request timed out"
+    except requests.exceptions.RequestException as e:
+        return [], f"Portfolio request failed: {e}"
+
+
+def get_tickers_from_portfolio(holdings):
+    """Extract ticker symbols from portfolio holdings."""
+    tickers = []
+    for h in holdings:
+        ticker = h.get("ticker") or h.get("symbol") or h.get("Ticker") or h.get("Symbol")
+        if ticker:
+            tickers.append(ticker.upper().strip())
+    return tickers
 
 
 def fetch_prices_batch(tickers):
@@ -225,9 +439,10 @@ def fetch_cefconnect_for_ticker(session, ticker):
         return {"NAV": "", "Discount": "", "Z_Score": "", "cef_ok": False}
 
 
-def fetch_cef_data(tickers):
+def fetch_cef_data(tickers, session=None):
     """Main function to fetch all CEF data and save to CSV."""
-    session = make_session()
+    if session is None:
+        session = make_session()
     price_map = fetch_prices_batch(tickers)
 
     rows = []
@@ -278,5 +493,109 @@ def fetch_cef_data(tickers):
     return df
 
 
+def fetch_portfolio_data(email=None, password=None):
+    """
+    Authenticate with CEFConnect and fetch portfolio holdings with full data.
+    
+    Usage:
+        # Interactive (prompts for credentials)
+        fetch_portfolio_data()
+        
+        # With credentials
+        fetch_portfolio_data("user@example.com", "password123")
+        
+        # With environment variables (CEFCONNECT_EMAIL, CEFCONNECT_PASSWORD)
+        fetch_portfolio_data()
+    
+    Returns:
+        DataFrame with portfolio holdings and enriched data
+    """
+    session = make_session()
+    
+    # Login to CEFConnect
+    success, message = cefconnect_login(session, email, password)
+    if not success:
+        print(f"Login failed: {message}")
+        return None
+    
+    # Fetch portfolio holdings
+    holdings, error = fetch_cefconnect_portfolio(session)
+    if error:
+        print(f"Portfolio fetch failed: {error}")
+        return None
+    
+    if not holdings:
+        print("No holdings found in portfolio")
+        return None
+    
+    # Extract tickers from portfolio
+    tickers = get_tickers_from_portfolio(holdings)
+    print(f"\nPortfolio tickers: {', '.join(tickers)}")
+    
+    # Fetch full data for portfolio tickers
+    df = fetch_cef_data(tickers, session=session)
+    
+    # Merge with portfolio-specific data (shares, cost basis, etc.)
+    portfolio_data = {}
+    for h in holdings:
+        ticker = (h.get("ticker") or h.get("symbol") or h.get("Ticker") or h.get("Symbol") or "").upper()
+        if ticker:
+            portfolio_data[ticker] = {
+                "Shares": h.get("shares") or h.get("Shares") or h.get("quantity") or "",
+                "CostBasis": h.get("costBasis") or h.get("cost_basis") or h.get("CostBasis") or "",
+                "PurchaseDate": h.get("purchaseDate") or h.get("purchase_date") or h.get("PurchaseDate") or "",
+            }
+    
+    # Add portfolio columns to DataFrame
+    if portfolio_data:
+        df["Shares"] = df["Symbol"].map(lambda x: portfolio_data.get(x, {}).get("Shares", ""))
+        df["CostBasis"] = df["Symbol"].map(lambda x: portfolio_data.get(x, {}).get("CostBasis", ""))
+        df["PurchaseDate"] = df["Symbol"].map(lambda x: portfolio_data.get(x, {}).get("PurchaseDate", ""))
+    
+    # Save portfolio-specific output
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+    os.makedirs(data_dir, exist_ok=True)
+    portfolio_path = os.path.join(data_dir, "cefconnect_portfolio.csv")
+    df.to_csv(portfolio_path, index=False)
+    print(f"\nSaved portfolio data to {portfolio_path}")
+    
+    return df
+
+
 if __name__ == "__main__":
-    fetch_cef_data(UNIVERSE)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Fetch CEF data from yfinance and CEFConnect")
+    parser.add_argument(
+        "--portfolio",
+        action="store_true",
+        help="Fetch holdings from your CEFConnect portfolio (requires login)"
+    )
+    parser.add_argument(
+        "--email",
+        type=str,
+        help="CEFConnect email (or set CEFCONNECT_EMAIL env var)"
+    )
+    parser.add_argument(
+        "--password",
+        type=str,
+        help="CEFConnect password (or set CEFCONNECT_PASSWORD env var)"
+    )
+    parser.add_argument(
+        "--tickers",
+        type=str,
+        help="Comma-separated list of tickers to fetch (default: Pensionizer Top 50)"
+    )
+    
+    args = parser.parse_args()
+    
+    if args.portfolio:
+        # Fetch from CEFConnect portfolio
+        fetch_portfolio_data(args.email, args.password)
+    elif args.tickers:
+        # Fetch specific tickers
+        tickers = [t.strip().upper() for t in args.tickers.split(",")]
+        fetch_cef_data(tickers)
+    else:
+        # Fetch default Pensionizer Top 50 universe
+        fetch_cef_data(UNIVERSE)
