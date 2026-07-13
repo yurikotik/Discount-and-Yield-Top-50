@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server"
+import { CEF_TICKERS } from "@/lib/cef-tickers"
 import { fetchUniverse, FUNDS_PER_BATCH, TOTAL_BATCHES } from "@/lib/cef-connect/fetch-universe"
-import { isMarketFetchWindow, loadLatestUniverseSnapshot, saveUniverseSnapshot } from "@/lib/cef-storage"
-import type { CEFProfile, CEFUniverseSnapshot } from "@/lib/cef-types"
-import { computeRankings } from "@/lib/cef-scoring"
+import {
+  isMarketFetchWindow,
+  isUniverseComplete,
+  rebuildLatestFromBatches,
+  resolveBatchRunId,
+  saveBatchSnapshot,
+} from "@/lib/cef-storage"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -18,31 +23,6 @@ function isAuthorized(request: Request): boolean {
 
   const url = new URL(request.url)
   return url.searchParams.get("secret") === secret
-}
-
-function mergeSnapshots(parts: CEFUniverseSnapshot[]): CEFUniverseSnapshot {
-  const profiles: CEFProfile[] = []
-  const errors = parts.flatMap((p) => p.errors)
-  const seen = new Set<string>()
-
-  for (const part of parts) {
-    for (const profile of part.profiles) {
-      const ticker = profile.overview.ticker
-      if (seen.has(ticker)) continue
-      seen.add(ticker)
-      profiles.push(profile)
-    }
-  }
-
-  return {
-    version: 1,
-    fetchedAt: new Date().toISOString(),
-    source: "cefconnect",
-    tickers: profiles.map((p) => p.overview.ticker),
-    profiles,
-    rankings: computeRankings(profiles),
-    errors,
-  }
 }
 
 function resolveBatchParams(url: URL): { batch: number; batchCount: number } | { error: string } {
@@ -110,34 +90,27 @@ export async function GET(request: Request) {
   try {
     const started = Date.now()
     const snapshot = await fetchUniverse({ batch, batchCount })
-
-    let finalSnapshot = snapshot
-
-    if (batch === 0) {
-      // Checkpoint first batch so later batches can merge.
-      await saveUniverseSnapshot(snapshot)
-    } else {
-      const existing = await loadLatestUniverseSnapshot()
-      finalSnapshot = existing ? mergeSnapshots([existing, snapshot]) : snapshot
-    }
-
-    const path = await saveUniverseSnapshot(finalSnapshot)
+    const runId = await resolveBatchRunId(batch)
+    const batchPath = await saveBatchSnapshot(runId, batch, snapshot)
+    const finalSnapshot = await rebuildLatestFromBatches(runId, batchCount)
     const durationMs = Date.now() - started
 
     return NextResponse.json({
       ok: true,
-      path,
+      path: batchPath,
+      runId,
       fetchedAt: finalSnapshot.fetchedAt,
       profileCount: finalSnapshot.profiles.length,
+      expectedCount: CEF_TICKERS.length,
       batchProfileCount: snapshot.profiles.length,
+      batchesLoaded: Math.ceil(finalSnapshot.profiles.length / FUNDS_PER_BATCH),
       errorCount: finalSnapshot.errors.length,
       errors: finalSnapshot.errors,
       durationMs,
       batch,
       batchCount,
       fundsPerBatch: FUNDS_PER_BATCH,
-      merged: batch > 0,
-      complete: finalSnapshot.profiles.length >= batchCount * FUNDS_PER_BATCH - (FUNDS_PER_BATCH - 1),
+      complete: isUniverseComplete(finalSnapshot),
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
