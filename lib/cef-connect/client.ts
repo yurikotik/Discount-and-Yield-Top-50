@@ -2,11 +2,13 @@ const BASE_URL = "https://www.cefconnect.com"
 const USER_AGENT =
   "Mozilla/5.0 (compatible; CEFXRayDashboard/1.0; +https://github.com/cef-xray)"
 
-/** Delay between funds (default 1.5s — override via CEF_FETCH_DELAY_MS). */
-export const FETCH_DELAY_MS = Number(process.env.CEF_FETCH_DELAY_MS ?? 1500)
+/** Delay between starting each fund worker task (default 400ms). */
+export const FETCH_DELAY_MS = Number(process.env.CEF_FETCH_DELAY_MS ?? 400)
+/** Parallel funds per wave (default 4 — override via CEF_FETCH_CONCURRENCY). */
+export const FETCH_CONCURRENCY = Number(process.env.CEF_FETCH_CONCURRENCY ?? 4)
 /** Delay between sequential fallback requests within a fund (default 200ms). */
 export const INTRA_FUND_DELAY_MS = Number(process.env.CEF_INTRA_FUND_DELAY_MS ?? 200)
-const REQUEST_TIMEOUT_MS = Number(process.env.CEF_REQUEST_TIMEOUT_MS ?? 30000)
+const REQUEST_TIMEOUT_MS = Number(process.env.CEF_REQUEST_TIMEOUT_MS ?? 90000)
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -24,7 +26,7 @@ export class CEFConnectError extends Error {
   }
 }
 
-async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
+async function fetchWithRetry(url: string, retries = 5): Promise<Response> {
   let lastError: unknown
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -37,13 +39,16 @@ async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
       if (res.status === 429 || res.status >= 500) {
-        await sleep(1000 * (attempt + 1))
+        await sleep(1500 * (attempt + 1))
         continue
       }
       return res
     } catch (err) {
       lastError = err
-      await sleep(1000 * (attempt + 1))
+      const isTimeout =
+        err instanceof Error &&
+        (err.name === "TimeoutError" || err.message.includes("aborted due to timeout"))
+      await sleep(isTimeout ? 2000 * (attempt + 1) : 1000 * (attempt + 1))
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError))
