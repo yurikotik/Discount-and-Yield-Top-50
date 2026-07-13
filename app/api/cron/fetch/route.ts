@@ -26,8 +26,10 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const force = url.searchParams.get("force") === "1"
+  const isVercelCron = request.headers.get("x-vercel-cron") === "1"
 
-  if (!force && !isMarketFetchWindow()) {
+  // Vercel cron runs once daily; always execute. Manual calls respect the ET window unless forced.
+  if (!force && !isVercelCron && !isMarketFetchWindow()) {
     return NextResponse.json({
       skipped: true,
       reason: "Outside 10:25–10:45 AM ET weekday fetch window. Pass ?force=1 to override.",
