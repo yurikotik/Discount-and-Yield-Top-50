@@ -8,7 +8,7 @@ const _jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-je
 
 export const metadata: Metadata = {
   title: 'Top 10 CEF Analytics Dashboard | Z-Score + PSI Ranking',
-  description: 'Institutional-grade 8-section X-ray dashboard for 10 closed-end funds. Scoring: composite_z = mean(z_yield, z_premium, z_vol, z_return), score = 0.7*z_norm + 0.3*(1-psi_norm). CSV-aligned to universe_cef_metrics.csv with ADV, UNII, and distribution coverage.',
+  description: 'Institutional-grade 8-section X-ray dashboard for 48 closed-end funds with live CEF Connect data, 5-pillar scoring, and Vercel Blob snapshots.',
   generator: 'v0.app',
   icons: {
     icon: [

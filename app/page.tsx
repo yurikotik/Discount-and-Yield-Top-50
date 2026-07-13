@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { CefSelector } from "@/components/cef-selector"
 import { PortfolioOverview } from "@/components/portfolio-overview"
@@ -13,25 +13,20 @@ import { DriftRegimeSection } from "@/components/drift-regime-section"
 import { LiquiditySection } from "@/components/liquidity-section"
 import { ConfidenceSection } from "@/components/confidence-section"
 import { FundComparison } from "@/components/fund-comparison"
-import {
-  cefUniverse,
-  fundRankings,
-  type CEFProfile,
-} from "@/lib/cef-universe"
+import type { CEFProfile, CEFUniverseSnapshot } from "@/lib/cef-types"
+import type { FundRanking } from "@/lib/utf-data"
 import {
   BarChart3,
   PieChart,
   DollarSign,
-  AlertTriangle,
   LayoutDashboard,
   GitCompare,
   Crosshair,
   Activity,
   Droplets,
   ShieldCheck,
+  RefreshCw,
 } from "lucide-react"
-
-// ─── View Modes ─────────────────────────────────────────────────────────────
 
 type ViewMode = "overview" | "fund-detail" | "comparison"
 
@@ -49,18 +44,48 @@ const fundDetailTabs = [
 type FundDetailTab = (typeof fundDetailTabs)[number]["id"]
 
 export default function Page() {
+  const [snapshot, setSnapshot] = useState<CEFUniverseSnapshot | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>("overview")
-  const [selectedTicker, setSelectedTicker] = useState("UTF")
+  const [selectedTicker, setSelectedTicker] = useState("AEF")
   const [activeDetailTab, setActiveDetailTab] = useState<FundDetailTab>("holdings")
+
+  const loadUniverse = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/universe", { cache: "no-store" })
+      const data = (await res.json()) as CEFUniverseSnapshot & { error?: string }
+      if (!res.ok) {
+        throw new Error(data.error ?? `Failed to load universe (${res.status})`)
+      }
+      setSnapshot(data)
+      if (data.profiles?.length && !data.profiles.some((p) => p.overview.ticker === selectedTicker)) {
+        setSelectedTicker(data.profiles[0].overview.ticker)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load universe")
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedTicker])
+
+  useEffect(() => {
+    loadUniverse()
+  }, [loadUniverse])
+
+  const cefUniverse: CEFProfile[] = snapshot?.profiles ?? []
+  const fundRankings: FundRanking[] = snapshot?.rankings ?? []
 
   const selectedProfile: CEFProfile = useMemo(
     () => cefUniverse.find((p) => p.overview.ticker === selectedTicker) ?? cefUniverse[0],
-    [selectedTicker]
+    [cefUniverse, selectedTicker],
   )
 
   const totalAum = useMemo(
     () => cefUniverse.reduce((s, f) => s + f.overview.aum, 0),
-    []
+    [cefUniverse],
   )
 
   const handleNavigateToFund = useCallback((ticker: string) => {
@@ -69,12 +94,13 @@ export default function Page() {
     setViewMode("fund-detail")
   }, [])
 
-  const handleSelectFundFromBar = useCallback((ticker: string) => {
-    setSelectedTicker(ticker)
-    if (viewMode !== "fund-detail") {
-      setViewMode("fund-detail")
-    }
-  }, [viewMode])
+  const handleSelectFundFromBar = useCallback(
+    (ticker: string) => {
+      setSelectedTicker(ticker)
+      if (viewMode !== "fund-detail") setViewMode("fund-detail")
+    },
+    [viewMode],
+  )
 
   const topNavItems = [
     { id: "overview" as ViewMode, label: "Portfolio Overview", icon: LayoutDashboard },
@@ -82,21 +108,44 @@ export default function Page() {
     { id: "comparison" as ViewMode, label: "Fund Comparison", icon: GitCompare },
   ]
 
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Loading CEF universe from CEF Connect…</p>
+      </div>
+    )
+  }
+
+  if (error || !selectedProfile || cefUniverse.length === 0) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6">
+        <p className="max-w-lg text-center text-sm text-muted-foreground">
+          {error ?? "No fund data available."}
+        </p>
+        <button
+          type="button"
+          onClick={loadUniverse}
+          className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm hover:bg-secondary/40"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  const fetchedLabel = snapshot?.fetchedAt
+    ? new Date(snapshot.fetchedAt).toLocaleString("en-US", { timeZone: "America/New_York" })
+    : "unknown"
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Global Header */}
       <DashboardHeader profile={selectedProfile} fundCount={cefUniverse.length} totalAum={totalAum} viewMode={viewMode} />
 
-      {/* CEF Selector Bar */}
       <div className="border-b border-border px-6 py-3 bg-secondary/20">
-        <CefSelector
-          funds={cefUniverse}
-          selectedTicker={selectedTicker}
-          onSelect={handleSelectFundFromBar}
-        />
+        <CefSelector funds={cefUniverse} selectedTicker={selectedTicker} onSelect={handleSelectFundFromBar} />
       </div>
 
-      {/* Top-Level View Navigation */}
       <nav className="border-b border-border px-6" role="tablist" aria-label="Dashboard views">
         <div className="flex gap-1 overflow-x-auto">
           {topNavItems.map((item) => {
@@ -121,7 +170,6 @@ export default function Page() {
         </div>
       </nav>
 
-      {/* Fund Detail Sub-Navigation */}
       {viewMode === "fund-detail" && (
         <nav className="border-b border-border bg-secondary/10 px-6" role="tablist" aria-label="Fund analysis sections">
           <div className="flex gap-1 overflow-x-auto">
@@ -148,9 +196,7 @@ export default function Page() {
         </nav>
       )}
 
-      {/* Main Content */}
       <main className="flex-1 p-6">
-        {/* Portfolio Overview */}
         {viewMode === "overview" && (
           <PortfolioOverview
             funds={cefUniverse}
@@ -161,7 +207,6 @@ export default function Page() {
           />
         )}
 
-        {/* Fund Detail (per-fund analysis, 8-section X-ray) */}
         {viewMode === "fund-detail" && (
           <>
             {activeDetailTab === "holdings" && <HoldingsSection data={selectedProfile} />}
@@ -175,20 +220,15 @@ export default function Page() {
           </>
         )}
 
-        {/* Fund Comparison */}
         {viewMode === "comparison" && (
-          <FundComparison
-            funds={cefUniverse}
-            rankings={fundRankings}
-            onNavigateToFund={handleNavigateToFund}
-          />
+          <FundComparison funds={cefUniverse} rankings={fundRankings} onNavigateToFund={handleNavigateToFund} />
         )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-border px-6 py-3">
         <p className="text-center text-xs text-muted-foreground">
-          CEF X-Ray Dashboard | {cefUniverse.length} Funds | 8-Section Analytics | 5-Pillar Scoring | Barchart CSV 2026-02-13 | Not investment advice
+          CEF X-Ray Dashboard | {cefUniverse.length} Funds | 8-Section Analytics | 5-Pillar Scoring | CEF Connect
+          live data | Last updated {fetchedLabel} ET | Not investment advice
         </p>
       </footer>
     </div>
