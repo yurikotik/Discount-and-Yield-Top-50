@@ -8,7 +8,7 @@ import {
   FETCH_DELAY_MS,
   fetchDailyPricing,
   fetchFundApis,
-  sleep,
+  politeDelay,
   type DailyPricingRow,
 } from "./client"
 
@@ -69,8 +69,8 @@ async function mapWithConcurrency<T, R>(
     while (true) {
       const index = nextIndex++
       if (index >= items.length) return
-      if (index > 0 && FETCH_DELAY_MS > 0) {
-        await sleep(FETCH_DELAY_MS)
+      if (index > 0) {
+        await politeDelay()
       }
       results[index] = await fn(items[index], index)
     }
@@ -82,7 +82,7 @@ async function mapWithConcurrency<T, R>(
 }
 
 /**
- * Slice the universe into fixed-size batches of at most FUNDS_PER_BATCH (10).
+ * Slice the universe into fixed-size batches of at most FUNDS_PER_BATCH.
  * batchCount is used only for validation; size is always FUNDS_PER_BATCH.
  */
 export function sliceBatch(

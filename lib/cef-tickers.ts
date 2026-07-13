@@ -1,5 +1,5 @@
-/** User-provided CEF universe (48 funds). */
-export const FUNDS_PER_BATCH = 10
+/** User-provided CEF universe (48 funds). Max funds per serverless invocation. */
+export const FUNDS_PER_BATCH = 2
 
 export const CEF_TICKERS = [
   "AEF",
