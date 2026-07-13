@@ -140,7 +140,13 @@ export default function Page() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <DashboardHeader profile={selectedProfile} fundCount={cefUniverse.length} totalAum={totalAum} viewMode={viewMode} />
+      <DashboardHeader
+        profile={selectedProfile}
+        fundCount={cefUniverse.length}
+        totalAum={totalAum}
+        viewMode={viewMode}
+        fetchedAt={snapshot?.fetchedAt}
+      />
 
       <div className="border-b border-border px-6 py-3 bg-secondary/20">
         <CefSelector funds={cefUniverse} selectedTicker={selectedTicker} onSelect={handleSelectFundFromBar} />

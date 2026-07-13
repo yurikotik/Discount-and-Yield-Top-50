@@ -8,6 +8,19 @@ interface Props {
   fundCount: number
   totalAum: number
   viewMode: string
+  fetchedAt?: string | null
+}
+
+function formatFetchedAt(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
 }
 
 const viewLabels: Record<string, string> = {
@@ -16,7 +29,7 @@ const viewLabels: Record<string, string> = {
   comparison: "Fund Comparison",
 }
 
-export function DashboardHeader({ profile, fundCount, totalAum, viewMode }: Props) {
+export function DashboardHeader({ profile, fundCount, totalAum, viewMode, fetchedAt }: Props) {
   const o = profile.overview
 
   return (
@@ -61,8 +74,10 @@ export function DashboardHeader({ profile, fundCount, totalAum, viewMode }: Prop
           </>
         )}
         <div className="flex flex-col items-end">
-          <span className="text-[9px] uppercase text-muted-foreground">As of</span>
-          <span className="font-mono text-xs text-foreground">2026-02-17</span>
+          <span className="text-[9px] uppercase text-muted-foreground">Last fetch</span>
+          <span className="font-mono text-xs text-foreground">
+            {fetchedAt ? `${formatFetchedAt(fetchedAt)} ET` : "—"}
+          </span>
         </div>
       </div>
     </header>
