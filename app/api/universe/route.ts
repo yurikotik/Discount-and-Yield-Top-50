@@ -19,7 +19,8 @@ export async function GET() {
 
   return NextResponse.json(snapshot, {
     headers: {
-      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      // Universe is rebuilt incrementally during the cron window — do not CDN-cache.
+      "Cache-Control": "private, no-store, max-age=0, must-revalidate",
     },
   })
 }
