@@ -1,4 +1,4 @@
-import { CEF_TICKERS } from "../cef-tickers"
+import { CEF_TICKERS, FUNDS_PER_BATCH, TOTAL_BATCHES } from "../cef-tickers"
 import type { CEFProfile, CEFUniverseSnapshot } from "../cef-types"
 import { computeRankings } from "../cef-scoring"
 import { buildCEFProfile } from "./build-profile"
@@ -14,13 +14,14 @@ import {
 
 export interface FetchUniverseOptions {
   tickers?: readonly string[]
-  /** Process tickers in slices (0-based). Use when the serverless function time limit is tight. */
-  batch?: number
-  batchCount?: number
+  /** 0-based batch index. Required for production fetches (max FUNDS_PER_BATCH per run). */
+  batch: number
+  /** Total number of batches (should be TOTAL_BATCHES for the full universe). */
+  batchCount: number
   onProgress?: (completed: number, total: number, ticker: string) => void
 }
 
-export { FETCH_CONCURRENCY, FETCH_DELAY_MS }
+export { FETCH_CONCURRENCY, FETCH_DELAY_MS, FUNDS_PER_BATCH, TOTAL_BATCHES }
 
 async function fetchOneFund(
   ticker: string,
@@ -80,18 +81,43 @@ async function mapWithConcurrency<T, R>(
   return results
 }
 
-function sliceBatch(tickers: readonly string[], batch?: number, batchCount?: number): string[] {
-  if (batch === undefined || batchCount === undefined || batchCount <= 1) {
-    return [...tickers]
+/**
+ * Slice the universe into fixed-size batches of at most FUNDS_PER_BATCH (10).
+ * batchCount is used only for validation; size is always FUNDS_PER_BATCH.
+ */
+export function sliceBatch(
+  tickers: readonly string[],
+  batch: number,
+  batchCount: number,
+): string[] {
+  const size = FUNDS_PER_BATCH
+  const expectedBatches = Math.ceil(tickers.length / size)
+
+  if (!Number.isInteger(batch) || batch < 0 || batch >= expectedBatches) {
+    throw new CEFConnectError(
+      `Invalid batch=${batch}. Expected 0..${expectedBatches - 1} for ${tickers.length} funds at ${size}/batch.`,
+    )
   }
-  const size = Math.ceil(tickers.length / batchCount)
+  if (!Number.isInteger(batchCount) || batchCount !== expectedBatches) {
+    throw new CEFConnectError(
+      `Invalid batches=${batchCount}. Expected batches=${expectedBatches} for ${tickers.length} funds at ${size}/batch.`,
+    )
+  }
+
   const start = batch * size
   return tickers.slice(start, start + size).map((t) => t.toUpperCase())
 }
 
-export async function fetchUniverse(options: FetchUniverseOptions = {}): Promise<CEFUniverseSnapshot> {
+export async function fetchUniverse(options: FetchUniverseOptions): Promise<CEFUniverseSnapshot> {
   const allTickers = options.tickers ?? CEF_TICKERS
   const tickers = sliceBatch(allTickers, options.batch, options.batchCount)
+
+  if (tickers.length > FUNDS_PER_BATCH) {
+    throw new CEFConnectError(
+      `Batch safety check failed: attempted to fetch ${tickers.length} funds (max ${FUNDS_PER_BATCH}).`,
+    )
+  }
+
   const dailyRows = await fetchDailyPricing()
   const dailyByTicker = new Map<string, DailyPricingRow>(
     dailyRows.map((row) => [row.Ticker.toUpperCase(), row]),

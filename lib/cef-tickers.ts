@@ -1,4 +1,6 @@
 /** User-provided CEF universe (48 funds). */
+export const FUNDS_PER_BATCH = 10
+
 export const CEF_TICKERS = [
   "AEF",
   "AGD",
@@ -51,3 +53,6 @@ export const CEF_TICKERS = [
 ] as const
 
 export type CEFTicker = (typeof CEF_TICKERS)[number]
+
+/** Total cron/curl batches needed at FUNDS_PER_BATCH funds each (ceil). */
+export const TOTAL_BATCHES = Math.ceil(CEF_TICKERS.length / FUNDS_PER_BATCH)

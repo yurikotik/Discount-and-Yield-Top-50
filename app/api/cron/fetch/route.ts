@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { fetchUniverse } from "@/lib/cef-connect/fetch-universe"
+import { fetchUniverse, FUNDS_PER_BATCH, TOTAL_BATCHES } from "@/lib/cef-connect/fetch-universe"
 import { isMarketFetchWindow, loadLatestUniverseSnapshot, saveUniverseSnapshot } from "@/lib/cef-storage"
 import type { CEFProfile, CEFUniverseSnapshot } from "@/lib/cef-types"
 import { computeRankings } from "@/lib/cef-scoring"
@@ -45,6 +45,36 @@ function mergeSnapshots(parts: CEFUniverseSnapshot[]): CEFUniverseSnapshot {
   }
 }
 
+function resolveBatchParams(url: URL): { batch: number; batchCount: number } | { error: string } {
+  const batchParam = url.searchParams.get("batch")
+  const batchCountParam = url.searchParams.get("batches")
+
+  if (batchParam === null || batchCountParam === null) {
+    return {
+      error:
+        `batch and batches are required. Each run fetches at most ${FUNDS_PER_BATCH} funds. ` +
+        `Use batch=0..${TOTAL_BATCHES - 1}&batches=${TOTAL_BATCHES}`,
+    }
+  }
+
+  const batch = Number(batchParam)
+  const batchCount = Number(batchCountParam)
+
+  if (!Number.isInteger(batch) || !Number.isInteger(batchCount)) {
+    return { error: "batch and batches must be integers" }
+  }
+  if (batchCount !== TOTAL_BATCHES) {
+    return {
+      error: `batches must be ${TOTAL_BATCHES} (${FUNDS_PER_BATCH} funds/batch for the current universe)`,
+    }
+  }
+  if (batch < 0 || batch >= TOTAL_BATCHES) {
+    return { error: `batch must be 0..${TOTAL_BATCHES - 1}` }
+  }
+
+  return { batch, batchCount }
+}
+
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -53,10 +83,22 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const force = url.searchParams.get("force") === "1"
   const isVercelCron = request.headers.get("x-vercel-cron") === "1"
-  const batchParam = url.searchParams.get("batch")
-  const batchCountParam = url.searchParams.get("batches")
-  const batch = batchParam !== null ? Number(batchParam) : undefined
-  const batchCount = batchCountParam !== null ? Number(batchCountParam) : undefined
+  const resolved = resolveBatchParams(url)
+
+  if ("error" in resolved) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: resolved.error,
+        fundsPerBatch: FUNDS_PER_BATCH,
+        totalBatches: TOTAL_BATCHES,
+        hint: `Example: ?force=1&batch=0&batches=${TOTAL_BATCHES}`,
+      },
+      { status: 400 },
+    )
+  }
+
+  const { batch, batchCount } = resolved
 
   if (!force && !isVercelCron && !isMarketFetchWindow()) {
     return NextResponse.json({
@@ -67,18 +109,16 @@ export async function GET(request: Request) {
 
   try {
     const started = Date.now()
-    const snapshot = await fetchUniverse({
-      batch: Number.isFinite(batch) ? batch : undefined,
-      batchCount: Number.isFinite(batchCount) ? batchCount : undefined,
-    })
+    const snapshot = await fetchUniverse({ batch, batchCount })
 
     let finalSnapshot = snapshot
 
-    if (batch !== undefined && batchCount !== undefined && batchCount > 1) {
-      if (batch > 0) {
-        const existing = await loadLatestUniverseSnapshot()
-        finalSnapshot = existing ? mergeSnapshots([existing, snapshot]) : snapshot
-      }
+    if (batch === 0) {
+      // Checkpoint first batch so later batches can merge.
+      await saveUniverseSnapshot(snapshot)
+    } else {
+      const existing = await loadLatestUniverseSnapshot()
+      finalSnapshot = existing ? mergeSnapshots([existing, snapshot]) : snapshot
     }
 
     const path = await saveUniverseSnapshot(finalSnapshot)
@@ -89,11 +129,15 @@ export async function GET(request: Request) {
       path,
       fetchedAt: finalSnapshot.fetchedAt,
       profileCount: finalSnapshot.profiles.length,
+      batchProfileCount: snapshot.profiles.length,
       errorCount: finalSnapshot.errors.length,
       errors: finalSnapshot.errors,
       durationMs,
-      batch: batch ?? null,
-      batchCount: batchCount ?? null,
+      batch,
+      batchCount,
+      fundsPerBatch: FUNDS_PER_BATCH,
+      merged: batch > 0,
+      complete: finalSnapshot.profiles.length >= batchCount * FUNDS_PER_BATCH - (FUNDS_PER_BATCH - 1),
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -101,7 +145,9 @@ export async function GET(request: Request) {
       {
         ok: false,
         error: message,
-        hint: "If this persists, try split batches: ?force=1&batch=0&batches=2 then ?force=1&batch=1&batches=2",
+        fundsPerBatch: FUNDS_PER_BATCH,
+        totalBatches: TOTAL_BATCHES,
+        hint: `Run in order: batch=0..${TOTAL_BATCHES - 1} with batches=${TOTAL_BATCHES}`,
       },
       { status: 500 },
     )

@@ -1,8 +1,24 @@
 {
   "crons": [
     {
-      "path": "/api/cron/fetch",
+      "path": "/api/cron/fetch?batch=0&batches=5",
       "schedule": "30 14 * * 1-5"
+    },
+    {
+      "path": "/api/cron/fetch?batch=1&batches=5",
+      "schedule": "35 14 * * 1-5"
+    },
+    {
+      "path": "/api/cron/fetch?batch=2&batches=5",
+      "schedule": "40 14 * * 1-5"
+    },
+    {
+      "path": "/api/cron/fetch?batch=3&batches=5",
+      "schedule": "45 14 * * 1-5"
+    },
+    {
+      "path": "/api/cron/fetch?batch=4&batches=5",
+      "schedule": "50 14 * * 1-5"
     }
   ],
   "functions": {
