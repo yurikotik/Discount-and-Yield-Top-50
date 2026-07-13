@@ -2,8 +2,11 @@ const BASE_URL = "https://www.cefconnect.com"
 const USER_AGENT =
   "Mozilla/5.0 (compatible; CEFXRayDashboard/1.0; +https://github.com/cef-xray)"
 
-export const FETCH_DELAY_MS = Number(process.env.CEF_FETCH_DELAY_MS ?? 4000)
-export const INTRA_FUND_DELAY_MS = Number(process.env.CEF_INTRA_FUND_DELAY_MS ?? 600)
+/** Delay between funds (default 1.5s — override via CEF_FETCH_DELAY_MS). */
+export const FETCH_DELAY_MS = Number(process.env.CEF_FETCH_DELAY_MS ?? 1500)
+/** Delay between sequential fallback requests within a fund (default 200ms). */
+export const INTRA_FUND_DELAY_MS = Number(process.env.CEF_INTRA_FUND_DELAY_MS ?? 200)
+const REQUEST_TIMEOUT_MS = Number(process.env.CEF_REQUEST_TIMEOUT_MS ?? 30000)
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -31,15 +34,16 @@ async function fetchWithRetry(url: string, retries = 3): Promise<Response> {
           "User-Agent": USER_AGENT,
         },
         cache: "no-store",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
       if (res.status === 429 || res.status >= 500) {
-        await sleep(1500 * (attempt + 1))
+        await sleep(1000 * (attempt + 1))
         continue
       }
       return res
     } catch (err) {
       lastError = err
-      await sleep(1500 * (attempt + 1))
+      await sleep(1000 * (attempt + 1))
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError))
@@ -148,56 +152,70 @@ export async function fetchDailyPricing(): Promise<DailyPricingRow[]> {
   return fetchJson<DailyPricingRow[]>(`/api/v3/DailyPricing?props=${props}`)
 }
 
+async function fetchPricingHistory(ticker: string): Promise<PricingHistoryResponse> {
+  const t = ticker.toUpperCase()
+  const empty: PricingHistoryResponse = {
+    Data: { Period: "1Y", PriceHistory: [], Ticker: t, Name: t },
+  }
+
+  // Try 1Y and 2Y in parallel first (covers most funds).
+  const primary = await Promise.allSettled(
+    (["1Y", "2Y"] as const).map((period) =>
+      fetchJson<PricingHistoryResponse>(`/api/v3/pricinghistory/${t}/${period}`),
+    ),
+  )
+  for (const result of primary) {
+    if (result.status === "fulfilled" && (result.value.Data?.PriceHistory?.length ?? 0) > 0) {
+      return result.value
+    }
+  }
+
+  // Sequential fallback for edge cases.
+  for (const period of ["3Y", "5Y", "YTD"] as const) {
+    try {
+      const res = await fetchJson<PricingHistoryResponse>(`/api/v3/pricinghistory/${t}/${period}`)
+      if ((res.Data?.PriceHistory?.length ?? 0) > 0) return res
+    } catch {
+      // try next
+    }
+    if (INTRA_FUND_DELAY_MS > 0) await sleep(INTRA_FUND_DELAY_MS)
+  }
+
+  return empty
+}
+
+async function fetchDistributions(ticker: string): Promise<DistributionResponse> {
+  const t = ticker.toUpperCase()
+  const results = await Promise.allSettled(
+    (["1Y", "2Y"] as const).map((period) =>
+      fetchJson<DistributionResponse>(`/api/v3/distributioncharter/fund/${t}/${period}`),
+    ),
+  )
+  for (const result of results) {
+    if (result.status === "fulfilled" && (result.value.Data?.length ?? 0) > 0) {
+      return result.value
+    }
+  }
+  return { Data: [] }
+}
+
 export async function fetchFundApis(ticker: string) {
   const t = ticker.toUpperCase()
 
-  let pricingHistory: PricingHistoryResponse | null = null
-  for (const period of ["2Y", "1Y", "3Y", "5Y", "YTD"] as const) {
-    try {
-      const res = await fetchJson<PricingHistoryResponse>(`/api/v3/pricinghistory/${t}/${period}`)
-      if ((res.Data?.PriceHistory?.length ?? 0) > 0) {
-        pricingHistory = res
-        break
-      }
-    } catch {
-      // try next period
-    }
-    await sleep(INTRA_FUND_DELAY_MS)
-  }
-  if (!pricingHistory) {
-    pricingHistory = {
-      Data: { Period: "1Y", PriceHistory: [], Ticker: t, Name: t },
-    }
-  }
+  const pricingHistory = await fetchPricingHistory(t)
 
-  await sleep(INTRA_FUND_DELAY_MS)
-  const annualized = await fetchJson<PerformanceResponse>(`/api/v3/performance/annualized/${t}`)
-  await sleep(INTRA_FUND_DELAY_MS)
-  const calendar = await fetchJson<PerformanceResponse>(`/api/v3/performance/calendar/${t}`)
-  await sleep(INTRA_FUND_DELAY_MS)
-
-  let distributions: DistributionResponse = { Data: [] }
-  for (const period of ["2Y", "1Y", "All"] as const) {
-    try {
-      const res = await fetchJson<DistributionResponse>(`/api/v3/distributioncharter/fund/${t}/${period}`)
-      if ((res.Data?.length ?? 0) > 0) {
-        distributions = res
-        break
-      }
-    } catch {
-      // try next period
-    }
-    await sleep(INTRA_FUND_DELAY_MS)
-  }
-
-  let assetAllocation: AllocationResponse = { Data: [] }
-  try {
-    assetAllocation = await fetchJson<AllocationResponse>(`/api/v3/assetallocation/${t}`)
-  } catch {
-    // optional
-  }
-  await sleep(INTRA_FUND_DELAY_MS)
-  const html = await fetchHtml(`/fund/${t}?view=holdings`)
+  // Fetch remaining endpoints in parallel (one burst per fund).
+  const [annualized, calendar, assetAllocation, html, distributions] = await Promise.all([
+    fetchJson<PerformanceResponse>(`/api/v3/performance/annualized/${t}`).catch(() => ({
+      Data: [],
+    })),
+    fetchJson<PerformanceResponse>(`/api/v3/performance/calendar/${t}`).catch(() => ({
+      Data: [],
+    })),
+    fetchJson<AllocationResponse>(`/api/v3/assetallocation/${t}`).catch(() => ({ Data: [] })),
+    fetchHtml(`/fund/${t}?view=holdings`),
+    fetchDistributions(t),
+  ])
 
   return { pricingHistory, annualized, calendar, distributions, assetAllocation, html }
 }
