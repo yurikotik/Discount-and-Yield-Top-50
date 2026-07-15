@@ -1,5 +1,5 @@
-import { list, put } from "@vercel/blob"
-import { CEF_TICKERS } from "./cef-tickers"
+import { del, head, list, put } from "@vercel/blob"
+import { CEF_TICKERS, TOTAL_BATCHES } from "./cef-tickers"
 import { computeRankings } from "./cef-scoring"
 import type { CEFProfile, CEFUniverseSnapshot } from "./cef-types"
 
@@ -7,6 +7,9 @@ const SNAPSHOT_PREFIX = "cef-universe/"
 const LATEST_PATH = `${SNAPSHOT_PREFIX}latest.json`
 const BATCHES_PREFIX = `${SNAPSHOT_PREFIX}batches/`
 const MANIFEST_PATH = `${BATCHES_PREFIX}manifest.json`
+
+/** Keep today + yesterday only (ET calendar dates). */
+const RETAIN_RUN_DAYS = 2
 
 const BLOB_PUT_OPTS = {
   access: "public" as const,
@@ -20,8 +23,14 @@ interface BatchManifest {
   startedAt: string
 }
 
-function etRunId(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date())
+function etRunId(date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(date)
+}
+
+function etRunIdDaysAgo(daysAgo: number): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() - daysAgo)
+  return etRunId(d)
 }
 
 function batchPath(runId: string, batch: number): string {
@@ -34,24 +43,63 @@ async function fetchJsonFromBlob<T>(url: string): Promise<T | null> {
   return (await res.json()) as T
 }
 
-async function loadManifest(): Promise<BatchManifest | null> {
+/** Prefer exact head(); fall back to a narrow list so we never miss latest.json. */
+async function resolveBlobUrl(pathname: string): Promise<string | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN
   if (!token) return null
 
   try {
-    const { blobs } = await list({ prefix: BATCHES_PREFIX, limit: 100 })
-    const manifest = blobs.find((b) => b.pathname === MANIFEST_PATH)
-    if (!manifest?.url) return null
-    return fetchJsonFromBlob<BatchManifest>(manifest.url)
+    const meta = await head(pathname)
+    if (meta?.url) return meta.url
   } catch {
-    return null
+    // fall through
   }
+
+  try {
+    // Exact/near prefix — finds latest.json even if a broad cef-universe/ list is full
+    const { blobs } = await list({ prefix: pathname, limit: 20 })
+    const hit = blobs.find((b) => b.pathname === pathname)
+    if (hit?.url) return hit.url
+  } catch {
+    // fall through
+  }
+
+  return null
+}
+
+async function loadJsonByPathname<T>(pathname: string): Promise<T | null> {
+  const url = await resolveBlobUrl(pathname)
+  if (!url) return null
+  return fetchJsonFromBlob<T>(url)
+}
+
+/**
+ * Rebuild snapshot from batch files for a runId and optionally republish latest.json.
+ * Used when latest.json is missing but batch cron files exist (self-heal).
+ */
+async function rebuildFromRunFolders(runIds: string[]): Promise<CEFUniverseSnapshot | null> {
+  for (const runId of runIds) {
+    const parts = await loadBatchSnapshots(runId, TOTAL_BATCHES)
+    if (parts.length === 0) continue
+    const merged = mergeUniverseSnapshots(parts)
+    if (merged.profiles.length === 0) continue
+    // Republish latest so the next request is fast
+    await put(LATEST_PATH, JSON.stringify(merged), BLOB_PUT_OPTS)
+    return merged
+  }
+  return null
+}
+
+async function loadManifest(): Promise<BatchManifest | null> {
+  return loadJsonByPathname<BatchManifest>(MANIFEST_PATH)
 }
 
 async function startBatchRun(): Promise<string> {
   const runId = etRunId()
   const manifest: BatchManifest = { runId, startedAt: new Date().toISOString() }
   await put(MANIFEST_PATH, JSON.stringify(manifest), BLOB_PUT_OPTS)
+  // Drop older batch folders + dated archives so Blob stays small.
+  await pruneOldUniverseBlobs(runId).catch(() => undefined)
   return runId
 }
 
@@ -126,44 +174,154 @@ export async function loadBatchSnapshots(
   }
 }
 
-/** Merge all batch files for the run and write latest.json. */
+export interface RebuildLatestResult {
+  /** What the UI should serve — never drops below previous full universe mid-cron. */
+  snapshot: CEFUniverseSnapshot
+  /** Profiles fetched successfully in today's run only. */
+  todayProfileCount: number
+  /** True when today's run has all expected tickers. */
+  complete: boolean
+}
+
+/**
+ * Merge today's batch files, overlay onto the previous latest.json, then publish.
+ *
+ * Mid-cron guarantee: if yesterday had 48 funds and today has only finished batch 0 (2 funds),
+ * latest.json still has 48 — today's 2 replace yesterday's counterparts; the other 46 stay.
+ * Users never see an empty/partial universe while cron is in progress.
+ */
 export async function rebuildLatestFromBatches(
   runId: string,
   batchCount: number,
-): Promise<CEFUniverseSnapshot> {
+): Promise<RebuildLatestResult> {
   const parts = await loadBatchSnapshots(runId, batchCount)
-  const merged = mergeUniverseSnapshots(parts)
-  await saveUniverseSnapshot(merged)
-  return merged
+  const todayPartial = mergeUniverseSnapshots(parts)
+  const existing = await loadLatestUniverseSnapshot()
+
+  // First wins: today's profiles take priority; gaps filled from previous latest.
+  const overlaid = existing
+    ? mergeUniverseSnapshots([todayPartial, existing])
+    : todayPartial
+
+  const complete = isTodayFetchComplete(todayPartial)
+
+  const snapshot: CEFUniverseSnapshot = {
+    ...overlaid,
+    // Keep last full-refresh timestamp until today's run finishes all tickers.
+    fetchedAt: complete ? overlaid.fetchedAt : (existing?.fetchedAt ?? overlaid.fetchedAt),
+  }
+
+  await saveUniverseSnapshot(snapshot, { writeArchive: complete })
+
+  return {
+    snapshot,
+    todayProfileCount: todayPartial.profiles.length,
+    complete,
+  }
 }
 
-export async function saveUniverseSnapshot(snapshot: CEFUniverseSnapshot): Promise<string> {
-  const timestamp = snapshot.fetchedAt.replace(/[:.]/g, "-")
-  const datedPath = `${SNAPSHOT_PREFIX}${timestamp}.json`
+/**
+ * Always overwrite latest.json (what the UI reads) with the overlaid snapshot.
+ * Dated archive only when today's fetch is fully complete.
+ */
+export async function saveUniverseSnapshot(
+  snapshot: CEFUniverseSnapshot,
+  options?: { writeArchive?: boolean },
+): Promise<string> {
   const body = JSON.stringify(snapshot)
 
-  await put(datedPath, body, BLOB_PUT_OPTS)
   await put(LATEST_PATH, body, BLOB_PUT_OPTS)
 
-  return datedPath
+  if (options?.writeArchive) {
+    const timestamp = snapshot.fetchedAt.replace(/[:.]/g, "-")
+    const datedPath = `${SNAPSHOT_PREFIX}${timestamp}.json`
+    await put(datedPath, body, BLOB_PUT_OPTS)
+    return datedPath
+  }
+
+  return LATEST_PATH
 }
 
+/** Read latest.json by exact pathname — never via a capped broad list. */
 export async function loadLatestUniverseSnapshot(): Promise<CEFUniverseSnapshot | null> {
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (!token) return null
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return null
 
-  try {
-    const { blobs } = await list({ prefix: SNAPSHOT_PREFIX, limit: 100 })
-    const latest = blobs.find((b) => b.pathname.endsWith("latest.json"))
-    if (!latest?.url) return null
-    return fetchJsonFromBlob<CEFUniverseSnapshot>(latest.url)
-  } catch {
-    return null
+  const direct = await loadJsonByPathname<CEFUniverseSnapshot>(LATEST_PATH)
+  if (direct) return direct
+
+  // Self-heal: cron may have written batch-N.json files while latest.json
+  // is missing/unfindable (e.g. old list(limit:100) regressions).
+  const recovered = await rebuildFromRunFolders([
+    etRunId(),
+    etRunIdDaysAgo(1),
+    etRunIdDaysAgo(2),
+  ])
+  return recovered
+}
+
+/**
+ * Keep only today + yesterday (ET) batch folders and recent complete archives.
+ * Helps storage/cost; not required for latest.json correctness after the head() fix.
+ */
+export async function pruneOldUniverseBlobs(keepRunId = etRunId()): Promise<number> {
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  if (!token) return 0
+
+  const keepRunIds = new Set<string>([keepRunId])
+  for (let i = 1; i < RETAIN_RUN_DAYS; i++) {
+    keepRunIds.add(etRunIdDaysAgo(i))
   }
+
+  const toDelete: string[] = []
+  let cursor: string | undefined
+
+  do {
+    const page = await list({ prefix: SNAPSHOT_PREFIX, limit: 1000, cursor })
+    cursor = page.cursor
+
+    for (const blob of page.blobs) {
+      const { pathname, url } = blob
+      if (!url) continue
+
+      // Always keep latest.json + active manifest
+      if (pathname === LATEST_PATH || pathname === MANIFEST_PATH) continue
+
+      // Batch folders: cef-universe/batches/YYYY-MM-DD/...
+      const batchMatch = pathname.match(/^cef-universe\/batches\/(\d{4}-\d{2}-\d{2})\//)
+      if (batchMatch) {
+        if (!keepRunIds.has(batchMatch[1])) toDelete.push(url)
+        continue
+      }
+
+      // Dated complete archives: cef-universe/2026-07-15T....json
+      if (/^cef-universe\/\d{4}-\d{2}-\d{2}T.+\.json$/.test(pathname)) {
+        const day = pathname.slice(SNAPSHOT_PREFIX.length, SNAPSHOT_PREFIX.length + 10)
+        // Keep archives whose UTC date matches a retained ET run day (best-effort).
+        if (![...keepRunIds].some((id) => day === id || pathname.includes(id))) {
+          toDelete.push(url)
+        }
+      }
+    }
+  } while (cursor)
+
+  if (toDelete.length === 0) return 0
+
+  // Delete in chunks
+  for (let i = 0; i < toDelete.length; i += 100) {
+    await del(toDelete.slice(i, i + 100))
+  }
+  return toDelete.length
 }
 
 export function isUniverseComplete(snapshot: CEFUniverseSnapshot): boolean {
   return snapshot.profiles.length >= CEF_TICKERS.length
+}
+
+/** Today's cron has successfully fetched every ticker in CEF_TICKERS. */
+export function isTodayFetchComplete(todayPartial: CEFUniverseSnapshot): boolean {
+  if (todayPartial.profiles.length < CEF_TICKERS.length) return false
+  const have = new Set(todayPartial.profiles.map((p) => p.overview.ticker.toUpperCase()))
+  return CEF_TICKERS.every((t) => have.has(t.toUpperCase()))
 }
 
 export function isMarketFetchWindow(): boolean {

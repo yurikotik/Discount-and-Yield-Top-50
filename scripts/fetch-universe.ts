@@ -5,7 +5,6 @@
  */
 import { fetchUniverse, FUNDS_PER_BATCH, TOTAL_BATCHES } from "../lib/cef-connect/fetch-universe"
 import {
-  isUniverseComplete,
   rebuildLatestFromBatches,
   resolveBatchRunId,
   saveBatchSnapshot,
@@ -30,16 +29,18 @@ async function main() {
 
     runId = await resolveBatchRunId(batch)
     const path = await saveBatchSnapshot(runId, batch, snapshot)
-    const merged = await rebuildLatestFromBatches(runId, TOTAL_BATCHES)
+    const rebuilt = await rebuildLatestFromBatches(runId, TOTAL_BATCHES)
     console.log(
-      `  Saved batch → ${path} | universe: ${merged.profiles.length} profiles (batch errors: ${snapshot.errors.length})`,
+      `  Saved batch → ${path} | UI universe: ${rebuilt.snapshot.profiles.length} | today: ${rebuilt.todayProfileCount} (batch errors: ${snapshot.errors.length})`,
     )
   }
 
   const final = await rebuildLatestFromBatches(runId, TOTAL_BATCHES)
-  console.log(`\nDone. Total profiles: ${final.profiles.length} (complete: ${isUniverseComplete(final)})`)
-  if (final.errors.length) {
-    console.warn("Errors:", final.errors)
+  console.log(
+    `\nDone. UI profiles: ${final.snapshot.profiles.length} | today: ${final.todayProfileCount} (complete: ${final.complete})`,
+  )
+  if (final.snapshot.errors.length) {
+    console.warn("Errors:", final.snapshot.errors)
   }
 }
 

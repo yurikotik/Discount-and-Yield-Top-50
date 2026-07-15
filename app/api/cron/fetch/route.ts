@@ -3,7 +3,6 @@ import { CEF_TICKERS } from "@/lib/cef-tickers"
 import { fetchUniverse, FUNDS_PER_BATCH, TOTAL_BATCHES } from "@/lib/cef-connect/fetch-universe"
 import {
   isMarketFetchWindow,
-  isUniverseComplete,
   rebuildLatestFromBatches,
   resolveBatchRunId,
   saveBatchSnapshot,
@@ -127,25 +126,25 @@ export async function GET(request: Request) {
     const snapshot = await fetchUniverse({ batch, batchCount })
     const runId = await resolveBatchRunId(batch)
     const batchPath = await saveBatchSnapshot(runId, batch, snapshot)
-    const finalSnapshot = await rebuildLatestFromBatches(runId, batchCount)
+    const rebuilt = await rebuildLatestFromBatches(runId, batchCount)
     const durationMs = Date.now() - started
 
     return NextResponse.json({
       ok: true,
       path: batchPath,
       runId,
-      fetchedAt: finalSnapshot.fetchedAt,
-      profileCount: finalSnapshot.profiles.length,
+      fetchedAt: rebuilt.snapshot.fetchedAt,
+      profileCount: rebuilt.snapshot.profiles.length,
+      todayProfileCount: rebuilt.todayProfileCount,
       expectedCount: CEF_TICKERS.length,
       batchProfileCount: snapshot.profiles.length,
-      batchesLoaded: Math.ceil(finalSnapshot.profiles.length / FUNDS_PER_BATCH),
-      errorCount: finalSnapshot.errors.length,
-      errors: finalSnapshot.errors,
+      errorCount: rebuilt.snapshot.errors.length,
+      errors: rebuilt.snapshot.errors,
       durationMs,
       batch,
       batchCount,
       fundsPerBatch: FUNDS_PER_BATCH,
-      complete: isUniverseComplete(finalSnapshot),
+      complete: rebuilt.complete,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

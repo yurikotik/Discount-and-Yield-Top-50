@@ -7,7 +7,6 @@
  */
 import { fetchUniverse, FUNDS_PER_BATCH, TOTAL_BATCHES } from "../lib/cef-connect/fetch-universe"
 import {
-  isUniverseComplete,
   rebuildLatestFromBatches,
   resolveBatchRunId,
   saveBatchSnapshot,
@@ -116,12 +115,13 @@ async function main() {
     }
     const runId = await resolveBatchRunId(0)
     const path = await saveBatchSnapshot(runId, 0, snapshot)
-    const merged = await rebuildLatestFromBatches(runId, TOTAL_BATCHES)
+    const rebuilt = await rebuildLatestFromBatches(runId, TOTAL_BATCHES)
     console.log("\n=== Saved to Blob ===", {
       path,
       runId,
-      profileCount: merged.profiles.length,
-      complete: isUniverseComplete(merged),
+      profileCount: rebuilt.snapshot.profiles.length,
+      todayProfileCount: rebuilt.todayProfileCount,
+      complete: rebuilt.complete,
     })
   } else {
     console.log("\n(Skip Blob write — pass --save with BLOB_READ_WRITE_TOKEN to persist)")

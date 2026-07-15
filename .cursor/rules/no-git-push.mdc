@@ -1,0 +1,11 @@
+---
+description: Never push commits or branches to git remotes unless the user explicitly asks
+alwaysApply: true
+---
+
+# Git push
+
+- **Never** run `git push`, `git push --force`, or any remote-updating git command unless the user explicitly asks to push in that message.
+- Commits are only when the user asks; push is a separate, explicit request.
+- If work needs to be on the remote, prepare the commit locally (when asked) and tell the user to push, or wait for them to say "push".
+- Do not push "to help" after a fix, deploy prep, or cron change.
