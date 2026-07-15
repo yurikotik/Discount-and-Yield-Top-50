@@ -14,24 +14,36 @@ export const maxDuration = 300
 
 /** Vercel cron sends UA `vercel-cron/1.0` and `x-vercel-cron-schedule`. */
 function isVercelCronRequest(request: Request): boolean {
-  const ua = request.headers.get("user-agent") ?? ""
+  const ua = (request.headers.get("user-agent") ?? "").toLowerCase()
   if (ua.includes("vercel-cron")) return true
   if (request.headers.get("x-vercel-cron-schedule")) return true
   // Legacy header (older Vercel behavior)
   return request.headers.get("x-vercel-cron") === "1"
 }
 
+function getCronSecret(): string | undefined {
+  const secret = process.env.CRON_SECRET?.trim()
+  return secret || undefined
+}
+
+/** Match Bearer token, ignoring CRON_SECRET trailing whitespace/newlines. */
+function hasValidBearer(request: Request, secret: string): boolean {
+  const authHeader = request.headers.get("authorization")?.trim()
+  if (!authHeader) return false
+  const match = /^Bearer\s+(.+)$/i.exec(authHeader)
+  if (!match) return false
+  return match[1].trim() === secret
+}
+
 function isAuthorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET
+  const secret = getCronSecret()
   if (!secret) return process.env.NODE_ENV !== "production"
 
-  const authHeader = request.headers.get("authorization")
-  if (authHeader === `Bearer ${secret}`) return true
-
+  if (hasValidBearer(request, secret)) return true
   if (isVercelCronRequest(request)) return true
 
   const url = new URL(request.url)
-  return url.searchParams.get("secret") === secret
+  return url.searchParams.get("secret")?.trim() === secret
 }
 
 function resolveBatchParams(url: URL): { batch: number; batchCount: number } | { error: string } {
@@ -65,13 +77,25 @@ function resolveBatchParams(url: URL): { batch: number; batchCount: number } | {
 }
 
 export async function GET(request: Request) {
+  const secret = getCronSecret()
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return NextResponse.json(
+      {
+        error: "Unauthorized",
+        hint: "Set CRON_SECRET in Production env (no trailing newline). Vercel cron sends Authorization: Bearer <CRON_SECRET>.",
+        hasAuthHeader: Boolean(request.headers.get("authorization")),
+        isCronUa: isVercelCronRequest(request),
+        hasCronSecretEnv: Boolean(secret),
+      },
+      { status: 401 },
+    )
   }
 
   const url = new URL(request.url)
   const force = url.searchParams.get("force") === "1"
-  const isVercelCron = isVercelCronRequest(request)
+  // Scheduled + dashboard "Run" both send Bearer CRON_SECRET and/or vercel-cron UA.
+  const isVercelCron =
+    isVercelCronRequest(request) || (secret ? hasValidBearer(request, secret) : false)
   const resolved = resolveBatchParams(url)
 
   if ("error" in resolved) {
@@ -89,8 +113,8 @@ export async function GET(request: Request) {
 
   const { batch, batchCount } = resolved
 
-  // Manual/API calls outside the market window need ?force=1.
-  // Vercel cron must always run — schedules span ~10:30–12:25 ET, wider than the old window.
+  // Manual unauthenticated-style calls outside the market window need ?force=1.
+  // Bearer CRON_SECRET / Vercel cron must always run (test schedules included).
   if (!force && !isVercelCron && !isMarketFetchWindow()) {
     return NextResponse.json({
       skipped: true,
