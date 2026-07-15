@@ -12,6 +12,15 @@ import {
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
+/** Vercel cron sends UA `vercel-cron/1.0` and `x-vercel-cron-schedule`. */
+function isVercelCronRequest(request: Request): boolean {
+  const ua = request.headers.get("user-agent") ?? ""
+  if (ua.includes("vercel-cron")) return true
+  if (request.headers.get("x-vercel-cron-schedule")) return true
+  // Legacy header (older Vercel behavior)
+  return request.headers.get("x-vercel-cron") === "1"
+}
+
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) return process.env.NODE_ENV !== "production"
@@ -19,7 +28,7 @@ function isAuthorized(request: Request): boolean {
   const authHeader = request.headers.get("authorization")
   if (authHeader === `Bearer ${secret}`) return true
 
-  if (request.headers.get("x-vercel-cron") === "1") return true
+  if (isVercelCronRequest(request)) return true
 
   const url = new URL(request.url)
   return url.searchParams.get("secret") === secret
@@ -62,7 +71,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const force = url.searchParams.get("force") === "1"
-  const isVercelCron = request.headers.get("x-vercel-cron") === "1"
+  const isVercelCron = isVercelCronRequest(request)
   const resolved = resolveBatchParams(url)
 
   if ("error" in resolved) {
@@ -80,6 +89,8 @@ export async function GET(request: Request) {
 
   const { batch, batchCount } = resolved
 
+  // Manual/API calls outside the market window need ?force=1.
+  // Vercel cron must always run — schedules span ~10:30–12:25 ET, wider than the old window.
   if (!force && !isVercelCron && !isMarketFetchWindow()) {
     return NextResponse.json({
       skipped: true,
