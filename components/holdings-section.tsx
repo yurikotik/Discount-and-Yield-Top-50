@@ -23,7 +23,7 @@ interface Props {
 }
 
 const SECTOR_COLORS = [
-  "#4a9eff", "#34d399", "#fbbf24", "#f87171", "#a78bfa",
+  "#117DAE", "#459212", "#D4B40A", "#CA3A41", "#6B7280",
   "#60a5fa", "#fb923c", "#e879f9", "#22d3ee", "#94a3b8",
 ]
 
@@ -50,9 +50,9 @@ export function HoldingsSection({ data }: Props) {
   }))
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="gy-stack">
       {/* Concentration Metrics */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-7">
+      <div className="grid grid-cols-2 gap-4 md:gap-5 md:grid-cols-4 lg:grid-cols-7">
         <ConcentrationCard label="Top 5 Wt." value={`${top5.toFixed(1)}%`} />
         <ConcentrationCard label="Top 10 Wt." value={`${top10.toFixed(1)}%`} />
         <ConcentrationCard label="Top 20 Wt." value={`${top20.toFixed(1)}%`} />
@@ -62,11 +62,11 @@ export function HoldingsSection({ data }: Props) {
         <ConcentrationCard label="AUM" value={`$${overview.aum.toFixed(1)}B`} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-8 lg:grid-cols-3">
         {/* Sector Pie */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Sector Allocation</CardTitle>
+            <CardTitle className="text-foreground">Sector Allocation</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[260px]">
@@ -88,11 +88,11 @@ export function HoldingsSection({ data }: Props) {
                   </Pie>
                   <RechartsTooltip
                     contentStyle={{
-                      backgroundColor: "oklch(0.16 0.018 250)",
-                      border: "1px solid oklch(0.25 0.02 250)",
+                      backgroundColor: "#FFFFFF",
+                      border: "1px solid #D9D2C8",
                       borderRadius: "8px",
-                      color: "oklch(0.95 0.01 250)",
-                      fontSize: "12px",
+                      color: "#1B242C",
+                      fontSize: "16px",
                     }}
                     formatter={(value: number) => [`${value.toFixed(1)}%`, ""]}
                   />
@@ -117,27 +117,27 @@ export function HoldingsSection({ data }: Props) {
         {/* Top Holdings Bar */}
         <Card className="border-border bg-card lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Top 15 Holdings by Weight</CardTitle>
+            <CardTitle className="text-foreground">Top 15 Holdings by Weight</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <XAxis type="number" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, "auto"]} tickFormatter={(v) => `${v}%`} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} width={65} />
+                  <XAxis type="number" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} domain={[0, "auto"]} tickFormatter={(v) => `${v}%`} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} width={65} />
                   <RechartsTooltip
                     contentStyle={{
-                      backgroundColor: "oklch(0.16 0.018 250)",
-                      border: "1px solid oklch(0.25 0.02 250)",
+                      backgroundColor: "#FFFFFF",
+                      border: "1px solid #D9D2C8",
                       borderRadius: "8px",
-                      color: "oklch(0.95 0.01 250)",
-                      fontSize: "12px",
+                      color: "#1B242C",
+                      fontSize: "16px",
                     }}
                     formatter={(value: number) => [`${value.toFixed(1)}%`, "Weight"]}
                   />
                   <Bar dataKey="weight" radius={[0, 4, 4, 0]} maxBarSize={16}>
                     {barData.map((_, index) => (
-                      <Cell key={`bar-${index}`} fill={index < 5 ? "#4a9eff" : "#34d399"} fillOpacity={1 - index * 0.04} />
+                      <Cell key={`bar-${index}`} fill={index < 5 ? "#117DAE" : "#459212"} fillOpacity={1 - index * 0.04} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -150,7 +150,7 @@ export function HoldingsSection({ data }: Props) {
       {/* Holdings Table */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Holdings Detail</CardTitle>
+          <CardTitle className="text-foreground">Holdings Detail</CardTitle>
           <CardDescription>USD-weighted positions for {overview.ticker}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -193,8 +193,8 @@ export function HoldingsSection({ data }: Props) {
 
 function ConcentrationCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-5">
+      <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">{label}</span>
       <span className="font-mono text-base font-semibold text-foreground">{value}</span>
     </div>
   )

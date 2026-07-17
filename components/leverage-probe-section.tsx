@@ -32,9 +32,9 @@ export function LeverageProbeSection({ data }: Props) {
   const flagBg = leverageProbe.residualFlagged ? "border-destructive/30" : "border-success/30"
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="gy-stack">
       {/* Summary Metrics */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:gap-5 md:grid-cols-4 lg:grid-cols-6">
         <ProbeMetric label="Leverage Ratio" value={`${risk.leverageRatio}%`} severity={risk.leverageRatio > 30 ? "high" : risk.leverageRatio > 15 ? "medium" : "low"} />
         <ProbeMetric label="Leverage Type" value={risk.leverageType.split("+")[0].trim()} />
         <ProbeMetric label="Leverage Cost" value={risk.leverageCost} />
@@ -59,27 +59,27 @@ export function LeverageProbeSection({ data }: Props) {
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-8 lg:grid-cols-2">
         {/* Residual Chart */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Return Residuals by Period</CardTitle>
+            <CardTitle className="text-foreground">Return Residuals by Period</CardTitle>
             <CardDescription>Gap between realized and reconstructed returns for {overview.ticker}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[260px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={residualBarData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" vertical={false} />
-                  <XAxis dataKey="period" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" vertical={false} />
+                  <XAxis dataKey="period" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                   <RechartsTooltip
-                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                    contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                     formatter={(value: number) => [`${value.toFixed(2)}%`, "Residual"]}
                   />
                   <Bar dataKey="residual" radius={[4, 4, 0, 0]} maxBarSize={40}>
                     {residualBarData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.residual > 1.0 ? "#f87171" : entry.residual > 0.5 ? "#fbbf24" : "#34d399"} />
+                      <Cell key={`cell-${index}`} fill={entry.residual > 1.0 ? "#CA3A41" : entry.residual > 0.5 ? "#D4B40A" : "#459212"} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -96,7 +96,7 @@ export function LeverageProbeSection({ data }: Props) {
         {/* Likely Instruments */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Detected / Likely Instruments</CardTitle>
+            <CardTitle className="text-foreground">Detected / Likely Instruments</CardTitle>
             <CardDescription>Inferred from leverage type, return residuals, and fund filings</CardDescription>
           </CardHeader>
           <CardContent>
@@ -114,7 +114,7 @@ export function LeverageProbeSection({ data }: Props) {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">{inst}</p>
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[length:var(--gy-text-xs)] text-muted-foreground">
                       {inst.includes("Total Return Swap") ? "Synthetic exposure via counterparty, notional not in reported assets" :
                        inst.includes("Interest Rate") ? "Hedges or amplifies duration exposure off-balance-sheet" :
                        inst.includes("Credit Default") ? "Provides credit protection or synthetic credit exposure" :
@@ -143,7 +143,7 @@ export function LeverageProbeSection({ data }: Props) {
       {/* Leverage Decomposition Table */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Leverage Decomposition</CardTitle>
+          <CardTitle className="text-foreground">Leverage Decomposition</CardTitle>
           <CardDescription>Breakdown of leverage sources for {overview.ticker}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -160,14 +160,14 @@ export function LeverageProbeSection({ data }: Props) {
               <TableRow className="border-border">
                 <TableCell className="text-xs font-medium text-foreground">Reported Leverage</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{risk.leverageType}</TableCell>
-                <TableCell className="text-right"><Badge variant="outline" className="text-[10px] text-success border-success/30">Disclosed</Badge></TableCell>
+                <TableCell className="text-right"><Badge variant="outline" className="text-[length:var(--gy-text-xs)] text-success border-success/30">Disclosed</Badge></TableCell>
                 <TableCell className="text-right font-mono text-xs text-foreground">{risk.leverageRatio}%</TableCell>
               </TableRow>
               <TableRow className="border-border">
                 <TableCell className="text-xs font-medium text-foreground">Return Residual</TableCell>
                 <TableCell className="text-xs text-muted-foreground">Unexplained monthly return gap</TableCell>
                 <TableCell className="text-right">
-                  <Badge variant="outline" className={`text-[10px] ${leverageProbe.residualFlagged ? "text-destructive border-destructive/30" : "text-success border-success/30"}`}>
+                  <Badge variant="outline" className={`text-[length:var(--gy-text-xs)] ${leverageProbe.residualFlagged ? "text-destructive border-destructive/30" : "text-success border-success/30"}`}>
                     {leverageProbe.residualFlagged ? "Flagged" : "Within norm"}
                   </Badge>
                 </TableCell>
@@ -177,14 +177,14 @@ export function LeverageProbeSection({ data }: Props) {
                 <TableRow className="border-border">
                   <TableCell className="text-xs font-medium text-foreground">Implied Derivative Notional</TableCell>
                   <TableCell className="text-xs text-muted-foreground">Off-balance-sheet estimated exposure</TableCell>
-                  <TableCell className="text-right"><Badge variant="outline" className="text-[10px] text-warning border-warning/30">Estimated</Badge></TableCell>
+                  <TableCell className="text-right"><Badge variant="outline" className="text-[length:var(--gy-text-xs)] text-warning border-warning/30">Estimated</Badge></TableCell>
                   <TableCell className="text-right font-mono text-xs text-foreground">${leverageProbe.impliedNotional}M</TableCell>
                 </TableRow>
               )}
               <TableRow className="border-border">
                 <TableCell className="text-xs font-medium text-foreground">Financing Cost</TableCell>
                 <TableCell className="text-xs text-muted-foreground">Cost of leverage on reported borrowings</TableCell>
-                <TableCell className="text-right"><Badge variant="outline" className="text-[10px] text-primary border-primary/30">Known</Badge></TableCell>
+                <TableCell className="text-right"><Badge variant="outline" className="text-[length:var(--gy-text-xs)] text-primary border-primary/30">Known</Badge></TableCell>
                 <TableCell className="text-right font-mono text-xs text-foreground">{risk.leverageCost}</TableCell>
               </TableRow>
             </TableBody>
@@ -197,8 +197,8 @@ export function LeverageProbeSection({ data }: Props) {
 
 function ProbeMetric({ label, value, severity }: { label: string; value: string; severity?: "high" | "medium" | "low" }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-5">
+      <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">{label}</span>
       <span className={`font-mono text-sm font-semibold ${
         severity === "high" ? "text-destructive" : severity === "medium" ? "text-warning" : "text-foreground"
       }`}>

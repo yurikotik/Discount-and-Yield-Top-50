@@ -5,56 +5,67 @@ import { Search, Activity, ShieldCheck } from "lucide-react"
 const pillars = [
   {
     icon: Search,
-    title: "Decode Holdings",
-    description: "Live look-through; sector and issuer mapping; leverage and derivatives detection.",
+    title: "See what’s inside",
+    description: "Find out what the fund owns — sectors, companies, and borrowing.",
   },
   {
     icon: Activity,
-    title: "Decode Behavior",
-    description: "NAV vs market decomposition; factor drift alerts; distribution sustainability signals.",
+    title: "See how it behaves",
+    description: "Compare market price to fund value, and spot income that may not last.",
   },
   {
     icon: ShieldCheck,
-    title: "Decode Risk",
-    description: "Concentration spikes; liquidity traps; premium/discount anomalies.",
+    title: "See the risks",
+    description: "Watch for crowded bets, hard-to-sell holdings, and pricey premiums.",
   },
 ]
 
 export function DecodeBanner() {
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-base font-bold text-foreground tracking-tight text-balance">
-            We Don{"'"}t Replicate &mdash; We Decode
+    <section className="rounded-xl border border-border bg-card p-6 md:p-8" aria-labelledby="decode-heading">
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-3">
+          <h2
+            id="decode-heading"
+            className="text-[length:var(--gy-text-lg)] font-bold tracking-[var(--gy-tracking)] text-foreground text-balance"
+          >
+            We don’t replace your fund — we explain it
           </h2>
-          <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl text-pretty">
-            We keep the CEF. We keep the yield. We keep the discount. We remove the guesswork.
-            Hercules X-ray intelligence decodes each fund{"'"}s true exposures without replacing it or losing the NAV discount.
+          <p className="max-w-3xl text-[length:var(--gy-text-base)] leading-[var(--gy-leading)] text-muted-foreground text-pretty">
+            Keep the closed-end fund, the income, and any discount. X-Ray shows what’s really going
+            on so you can decide with clearer information.
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-3">
           {pillars.map((p) => {
             const Icon = p.icon
             return (
-              <div key={p.title} className="flex gap-3 rounded-md border border-border/50 bg-secondary/30 p-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                  <Icon className="h-4 w-4 text-primary" />
+              <div
+                key={p.title}
+                className="flex gap-4 rounded-lg border border-border bg-secondary/40 p-5"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-[var(--gy-blue-soft)]">
+                  <Icon className="h-6 w-6 text-[var(--gy-blue)]" aria-hidden />
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs font-semibold text-foreground">{p.title}</span>
-                  <span className="text-[10px] text-muted-foreground leading-relaxed">{p.description}</span>
+                <div className="flex flex-col gap-2">
+                  <span className="text-[length:var(--gy-text-base)] font-semibold text-foreground">
+                    {p.title}
+                  </span>
+                  <span className="text-[length:var(--gy-text-sm)] leading-[var(--gy-leading)] text-muted-foreground">
+                    {p.description}
+                  </span>
                 </div>
               </div>
             )
           })}
         </div>
 
-        <p className="text-[10px] text-muted-foreground/60">
-          5-pillar scoring: Yield Quality 25% + Discount Attractiveness 25% + X-Ray Stability 20% + Risk & Liquidity 15% + Momentum & Regime 15%
+        <p className="text-[length:var(--gy-text-sm)] leading-[var(--gy-leading)] text-muted-foreground">
+          Rankings use five simple checks: income quality, discount attractiveness, stability, risk
+          &amp; liquidity, and recent momentum.
         </p>
       </div>
-    </div>
+    </section>
   )
 }

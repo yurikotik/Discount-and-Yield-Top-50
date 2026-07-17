@@ -23,10 +23,10 @@ interface Props {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  income: "#4a9eff",
-  roc: "#f87171",
-  "capital-gain": "#34d399",
-  mixed: "#fbbf24",
+  income: "#117DAE",
+  roc: "#CA3A41",
+  "capital-gain": "#459212",
+  mixed: "#D4B40A",
 }
 
 export function IncomeSection({ data }: Props) {
@@ -72,9 +72,9 @@ export function IncomeSection({ data }: Props) {
     : 999
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="gy-stack">
       {/* Yield Metrics */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-7">
+      <div className="grid grid-cols-2 gap-4 md:gap-5 md:grid-cols-4 lg:grid-cols-7">
         <MetricCard label="Yield on NAV" value={`${yieldOnNav.toFixed(1)}%`} />
         <MetricCard label="Yield on Price" value={`${yieldOnPrice.toFixed(1)}%`} />
         <MetricCard label="Annual Dist" value={`$${annualDist.toFixed(2)}`} />
@@ -84,27 +84,27 @@ export function IncomeSection({ data }: Props) {
         <MetricCard label="NAV per Share" value={`$${overview.navPerShare.toFixed(2)}`} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-8 lg:grid-cols-3">
         {/* Distribution History Bar Chart */}
         <Card className="border-border bg-card lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Distribution History</CardTitle>
+            <CardTitle className="text-foreground">Distribution History</CardTitle>
             <CardDescription>Monthly distributions for {overview.ticker}, colored by type</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} interval={2} />
-                  <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(2)}`} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} interval={2} />
+                  <YAxis tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(2)}`} />
                   <RechartsTooltip
-                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                    contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                     formatter={(value: number) => [`$${value.toFixed(4)}`, "Distribution"]}
                   />
                   <Bar dataKey="amount" radius={[4, 4, 0, 0]} maxBarSize={20}>
                     {barData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={TYPE_COLORS[entry.type] || "#4a9eff"} />
+                      <Cell key={`cell-${index}`} fill={TYPE_COLORS[entry.type] || "#117DAE"} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -125,7 +125,7 @@ export function IncomeSection({ data }: Props) {
         {/* Distribution Composition */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Distribution Composition</CardTitle>
+            <CardTitle className="text-foreground">Distribution Composition</CardTitle>
             <CardDescription>Source breakdown over full period</CardDescription>
           </CardHeader>
           <CardContent>
@@ -150,7 +150,7 @@ export function IncomeSection({ data }: Props) {
             </div>
 
             <div className="mt-6 rounded-lg border border-border bg-secondary/30 p-3">
-              <p className="text-[10px] leading-relaxed text-muted-foreground">
+              <p className="text-[length:var(--gy-text-xs)] leading-relaxed text-muted-foreground">
                 <strong className="text-foreground">ROC Warning:</strong> Return of capital distributions reduce cost basis and may indicate the fund is paying out more than it earns. A payout ratio above 100% is a caution signal.
               </p>
             </div>
@@ -161,21 +161,21 @@ export function IncomeSection({ data }: Props) {
       {/* Cumulative Distribution Chart */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Cumulative Distributions</CardTitle>
+          <CardTitle className="text-foreground">Cumulative Distributions</CardTitle>
           <CardDescription>Running total of per-share distributions for {overview.ticker}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={cumulativeData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
-                <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} interval={3} />
-                <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(2)}`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" />
+                <XAxis dataKey="date" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} interval={3} />
+                <YAxis tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(2)}`} />
                 <RechartsTooltip
-                  contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                  contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                   formatter={(value: number) => [`$${value.toFixed(4)}`, "Cumulative"]}
                 />
-                <Area type="monotone" dataKey="cumulative" stroke="#34d399" fill="#34d399" fillOpacity={0.1} strokeWidth={2} />
+                <Area type="monotone" dataKey="cumulative" stroke="#459212" fill="#459212" fillOpacity={0.1} strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -187,8 +187,8 @@ export function IncomeSection({ data }: Props) {
 
 function MetricCard({ label, value, highlight }: { label: string; value: string; highlight?: "positive" | "negative" }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-5">
+      <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">{label}</span>
       <span className={`font-mono text-base font-semibold ${
         highlight === "positive" ? "text-success" : highlight === "negative" ? "text-destructive" : "text-foreground"
       }`}>

@@ -1,0 +1,403 @@
+---
+description: Game of Yield / Pensionizer brand UI — tokens, senior UX, logo flavor (use on every GY site)
+globs: "**/*.{tsx,jsx,css,scss,sass,html,vue,mdx}"
+alwaysApply: false
+---
+
+# Game of Yield — Brand UI (all sites)
+
+Copy this file into any Game of Yield / Pensionizer / Catch KYC / Club site as:
+
+`.cursor/rules/game-of-yield-brand-ui.mdc`
+
+**Same brand identity. Different layout per product.** Never clone one site’s layout onto another — only share tokens, type, spacing, and UX rules.
+
+Inspired by Medicare.gov + [Senior Planet](https://seniorplanet.org/) (plain verbs, large type, low cognitive load). Desktop Senior Planet uses licensed **Gotham**; we use open **Figtree** (their companion font) so every GY site can ship legally.
+
+---
+
+## 0. Porting checklist (new site)
+
+1. Copy this rule file into `.cursor/rules/`
+2. Paste CSS tokens + utilities into global CSS (`:root`, `.dark`, helpers)
+3. Load **Figtree** 400/500/600/700 (e.g. `next/font/google` → `--font-figtree`)
+4. Map design-system tokens (shadcn/Tailwind) → GY colors
+5. Add brand stripe once near header; wordmark; skip-link; focus rings
+6. Prefer A/A+/A++ + light/dark grey toggle when the product is tools/analytics
+7. Apply product layout personality (section 6) — do not copy X-Ray chrome onto marketing
+
+---
+
+## 1. Required CSS tokens
+
+Put these on every site (`:root`). **Do not invent new accent palettes.**
+
+```css
+:root {
+  /* Logo flavor — Pensionizer Income Engine */
+  --gy-green: #459212;
+  --gy-yellow: #FCDA0F;
+  --gy-red: #CA3A41;
+  --gy-blue: #117DAE;
+  --gy-green-soft: #E8F3DC;
+  --gy-yellow-soft: #FFF6C2;
+  --gy-red-soft: #F8E4E5;
+  --gy-blue-soft: #E3F1F8;
+
+  /* Calm base */
+  --gy-ink: #1B242C;
+  --gy-muted: #4A5560;
+  --gy-bg: #F6F3EE;
+  --gy-surface: #FFFFFF;
+  --gy-border: #D9D2C8;
+
+  /* Semantics */
+  --gy-success: var(--gy-green);
+  --gy-danger: var(--gy-red);
+  --gy-gold: #D4B40A; /* readable yellow for text / charts */
+  --gy-navy: var(--gy-blue);
+
+  /* Type — Figtree (Senior Planet companion); weights 400–700 only */
+  --gy-font: Figtree, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+  --gy-text-xs: 1rem;       /* 16px labels / captions */
+  --gy-text-sm: 1rem;       /* 16px UI / tables */
+  --gy-text-base: 1.125rem; /* 18px body — minimum */
+  --gy-text-lg: 1.25rem;    /* 20px section titles / metrics */
+  --gy-text-xl: 1.375rem;   /* 22px page title */
+  --gy-text-2xl: 1.5rem;    /* 24px max heading — avoid huge jumps */
+  --gy-leading: 1.55;
+  --gy-tracking: 0.01em;
+
+  /* Spacing — generous for glasses / senior UX */
+  --gy-space-1: 0.5rem;
+  --gy-space-2: 0.75rem;
+  --gy-space-3: 1rem;
+  --gy-space-4: 1.5rem;
+  --gy-space-5: 2rem;
+  --gy-space-6: 2.5rem;
+  --gy-space-section: 2rem;
+
+  /* Text-size control (A / A+ / A++) multiplies html font-size */
+  --gy-scale: 1;
+
+  /* Optional: map shadcn/Tailwind semantic tokens */
+  --background: var(--gy-bg);
+  --foreground: var(--gy-ink);
+  --card: var(--gy-surface);
+  --card-foreground: var(--gy-ink);
+  --primary: var(--gy-blue);
+  --primary-foreground: #ffffff;
+  --secondary: var(--gy-blue-soft);
+  --secondary-foreground: var(--gy-ink);
+  --muted: #EFEBE4;
+  --muted-foreground: var(--gy-muted);
+  --accent: var(--gy-green-soft);
+  --accent-foreground: var(--gy-ink);
+  --destructive: var(--gy-red);
+  --border: var(--gy-border);
+  --input: var(--gy-border);
+  --ring: var(--gy-blue);
+  --chart-1: var(--gy-blue);
+  --chart-2: var(--gy-green);
+  --chart-3: var(--gy-gold);
+  --chart-4: var(--gy-red);
+  --chart-5: #6B7280;
+  --success: var(--gy-green);
+  --warning: var(--gy-gold);
+  --radius: 0.5rem;
+}
+
+/* Dark GREY only — never blue wash / purple fintech */
+.dark {
+  --gy-bg: #1A1C1E;
+  --gy-surface: #2A2C2E;
+  --gy-ink: #F3EFE8;
+  --gy-muted: #A8AEB4;
+  --gy-border: #3F4347;
+  --gy-green-soft: #24351A;
+  --gy-yellow-soft: #3A3410;
+  --gy-red-soft: #3A1E20;
+  --gy-blue-soft: #173040;
+
+  --background: var(--gy-bg);
+  --foreground: var(--gy-ink);
+  --card: var(--gy-surface);
+  --card-foreground: var(--gy-ink);
+  --primary: #3BA3D0;
+  --primary-foreground: #1A1C1E;
+  --secondary: var(--gy-blue-soft);
+  --muted: #232628;
+  --muted-foreground: var(--gy-muted);
+  --destructive: #E0575D;
+  --border: var(--gy-border);
+  --ring: #3BA3D0;
+  --success: #6BB83A;
+  --warning: var(--gy-gold);
+}
+```
+
+Heat / status scale = logo pie: **green → yellow → red**. Bright yellow needs **dark ink** on chips (not white text).
+
+### Chart colors (when CSS vars unavailable in chart libs)
+
+```
+grid/border: #D9D2C8
+tick/label:  #4A5560
+tooltip bg:  #FFFFFF | text #1B242C
+series:      #117DAE, #459212, #D4B40A, #CA3A41, #6B7280
+```
+
+---
+
+## 2. Flavor rule (critical)
+
+Logo colors are **seasoning, not the stew**.
+
+| DO use for | DO NOT use for |
+|------------|----------------|
+| Thin stripe `green \| yellow \| red` | Full-page backgrounds |
+| Active / selected states | Large body text |
+| Score chips, badges, key metrics | Every border & button |
+| One primary CTA per screen (blue) | Neon gradients / purple fintech |
+| Small brand wordmarks | Competing chrome everywhere |
+
+Wordmark pattern:
+
+- `Game of Yield` → `--gy-green` bold
+- `· Income Engine` → `--gy-red` bold
+- Page title → `--gy-ink` / foreground
+
+Primary CTA fill: `--gy-blue` + white text. Secondary: border / soft blue surface.
+
+---
+
+## 3. Typography & a11y (required)
+
+### Font
+
+- **Figtree** via Google Fonts / `next/font` (weights **400, 500, 600, 700** only)
+- No Thin/Light; no script, display serif, condensed, or ultra-stylish fonts
+- Mono only for tickers / numbers (e.g. JetBrains Mono) — never for body copy
+
+### Scale (keep steps tight — labels must not look tiny vs titles)
+
+| Token | Size | Use |
+|-------|------|-----|
+| `--gy-text-xs` / `sm` | 16px | Labels, tables, captions |
+| `--gy-text-base` | 18px | Body, buttons, nav |
+| `--gy-text-lg` | 20px | Section titles, metrics |
+| `--gy-text-xl` | 22px | Page H1 |
+| `--gy-text-2xl` | 24px | Max hero (rare) |
+
+If using Tailwind, **remap** `text-xs`…`text-2xl` to these tokens so leftover `text-xs` cannot become 12px.
+
+### A11y
+
+- Body ≥ **18px**; line-height ~**1.55**
+- Links underlined or clearly marked (not color alone)
+- Tap targets ≥ **44px** (prefer **48px** / `min-h-12` for primary tasks)
+- Visible focus rings (e.g. 3px `--gy-blue`)
+- Skip-to-content link → `#main-content`
+- Zoom-safe to 200%
+- When feasible: **A / A+ / A++** text scale (`--gy-scale`: 1 / 1.08 / 1.16) on `html { font-size: calc(100% * var(--gy-scale)) }`
+- Light default + dark **grey** toggle
+
+---
+
+## 4. Spacing (required)
+
+Components must have **enough breathing room** — do not pack chrome.
+
+- Section stacks: `gap: var(--gy-space-section)` (2rem) via `.gy-stack`
+- Cards: generous padding (~1.5–1.75rem); soft border `--gy-border`; radius ~0.5–0.75rem
+- Tables: cell padding ~12–14px vertical
+- Page main: horizontal padding ≥ 1.5rem (prefer 2rem on md+)
+- Avoid dense icon-only rows without labels
+
+```css
+.gy-stack { display: flex; flex-direction: column; gap: var(--gy-space-section); }
+.gy-stack-tight { display: flex; flex-direction: column; gap: var(--gy-space-4); }
+.gy-section-title {
+  font-size: var(--gy-text-lg);
+  font-weight: 700;
+  letter-spacing: var(--gy-tracking);
+  color: var(--foreground);
+  line-height: 1.35;
+}
+.gy-section-help {
+  font-size: var(--gy-text-sm);
+  color: var(--gy-muted);
+  line-height: var(--gy-leading);
+  max-width: 42rem;
+  margin-top: 0.35rem;
+}
+```
+
+---
+
+## 5. UX patterns (Medicare.gov + Senior Planet)
+
+- **Action-first:** “What do you want to do / check?”
+- Large **task cards** with plain verbs: Find, Get, Check, See, Open, Compare, Try again
+- One job per section; short help line under titles
+- Calm hierarchy; help path obvious; no clutter
+- Soft borders, generous whitespace, minimal chrome
+- Prefer plain English over jargon (`Discount` not `P/D`; `Income rate` not `Dist`; `Borrowing` not `Lev`)
+- Error/loading copy a non-developer can understand
+
+```css
+.gy-task-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-height: 5.5rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--gy-border);
+  background: var(--gy-surface);
+  text-align: left;
+}
+.gy-task-card[data-active="true"],
+.gy-task-card[aria-pressed="true"] {
+  border-color: var(--gy-blue);
+  background: var(--gy-blue-soft);
+  box-shadow: inset 0 0 0 2px var(--gy-blue);
+}
+```
+
+---
+
+## 6. Same brand, different layout
+
+Vary **structure**, not **tokens**:
+
+| Product | Layout personality |
+|---------|-------------------|
+| Marketing / club | Ivory pages, storytelling, few CTAs |
+| Play Deck | Rank-forward card stack, minimal chrome |
+| Analytics / X-Ray | Denser data OK; still senior type/spacing; dark grey optional |
+| Membership / shop | Single column, one primary CTA |
+
+---
+
+## 7. Required utilities
+
+```css
+/* Brand stripe — once near header */
+.gy-brand-stripe {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  height: 4px;
+  width: 100%;
+}
+.gy-brand-stripe > :nth-child(1) { background: var(--gy-green); }
+.gy-brand-stripe > :nth-child(2) { background: var(--gy-yellow); }
+.gy-brand-stripe > :nth-child(3) { background: var(--gy-red); }
+
+/* Heat chips — yellow uses dark ink */
+.gy-chip-green { background: var(--gy-green-soft); color: var(--gy-green); }
+.gy-chip-yellow { background: var(--gy-yellow-soft); color: var(--gy-ink); }
+.gy-chip-red { background: var(--gy-red-soft); color: var(--gy-red); }
+```
+
+Heat helper (JS/TS):
+
+```ts
+export function heatChipClass(score01: number): string {
+  if (score01 >= 0.7) return "gy-chip-green"
+  if (score01 >= 0.4) return "gy-chip-yellow"
+  return "gy-chip-red"
+}
+```
+
+---
+
+## 8. Component snippets
+
+```tsx
+// ✅ GOOD — calm plate + logo flavor
+<header>
+  <div className="gy-brand-stripe" aria-hidden><span /><span /><span /></div>
+  <p>
+    <span className="font-bold text-[var(--gy-green)]">Game of Yield</span>
+    <span className="font-bold text-[var(--gy-red)]"> · Income Engine</span>
+  </p>
+  <h1 className="text-[length:var(--gy-text-xl)] font-bold text-[var(--gy-ink)]">…</h1>
+  <button type="button" className="min-h-12 bg-[var(--gy-blue)] px-5 font-semibold text-white">
+    Check RANK*
+  </button>
+</header>
+
+// ❌ BAD — logo wash, tiny type, fancy font
+<div className="bg-[#459212] text-xs font-thin italic text-[#FCDA0F]">Upgrade</div>
+```
+
+### Next.js font load
+
+```tsx
+import { Figtree } from "next/font/google"
+
+const figtree = Figtree({
+  subsets: ["latin"],
+  variable: "--font-figtree",
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+})
+// body className includes figtree.variable
+// CSS: font-family: var(--font-figtree), var(--gy-font);
+```
+
+### Skip link
+
+```css
+.skip-to-content {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.skip-to-content:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  width: auto;
+  height: auto;
+  padding: 0.75rem 1.25rem;
+  background: var(--gy-blue);
+  color: #fff;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+```
+
+---
+
+## 9. Forbidden looks
+
+Do **not** ship:
+
+1. Purple-on-white / purple–indigo gradient “AI fintech”
+2. Warm cream + terracotta serif brochure look (unless product is explicitly that)
+3. Dense broadsheet / hairline newspaper chrome
+4. Neon glows, rounded-full pill spam, multi-layer shadows
+5. Blue-wash dark themes (dark must stay **grey**)
+6. Tiny 10–12px captions fighting large titles
+7. Emoji as primary UI decoration
+
+---
+
+## 10. Ship checklist
+
+- [ ] Tokens present; no rogue accent palette
+- [ ] Figtree loaded; weights 400–700 only
+- [ ] Flavor sparse but noticeable (stripe / accents / heat)
+- [ ] Body ≥18px; tight type scale; WCAG AA
+- [ ] Yellow not used for small body text; yellow chips use dark ink
+- [ ] Generous spacing (`.gy-stack`, card/table padding)
+- [ ] Tap targets ≥44px; focus rings; skip-link
+- [ ] Plain verbs / low jargon; one clear primary action above the fold
+- [ ] Layout distinct from sibling GY apps
+- [ ] Dark theme (if any) = grey base, not blue wash

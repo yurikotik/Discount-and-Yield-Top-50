@@ -47,30 +47,30 @@ export function FactorsSection({ data }: Props) {
   }))
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="gy-stack">
       {/* NAV vs Market Return Decomposition */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">NAV vs Market Return Decomposition</CardTitle>
+          <CardTitle className="text-foreground">NAV vs Market Return Decomposition</CardTitle>
           <CardDescription>Breaking total return into NAV-driven, premium/discount, distribution, and leverage components</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-8 lg:grid-cols-2">
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={decompositionBarData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
-                  <XAxis dataKey="period" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" />
+                  <XAxis dataKey="period" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                   <RechartsTooltip
-                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                    contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                     formatter={(value: number) => [`${value.toFixed(1)}%`, ""]}
                   />
                   <Legend wrapperStyle={{ fontSize: "11px", color: "oklch(0.60 0.02 250)" }} />
-                  <Bar dataKey="NAV Return" stackId="a" fill="#4a9eff" />
-                  <Bar dataKey="P/D Effect" stackId="a" fill="#34d399" />
-                  <Bar dataKey="Distribution" stackId="a" fill="#fbbf24" />
-                  <Bar dataKey="Leverage" stackId="a" fill="#f87171" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="NAV Return" stackId="a" fill="#117DAE" />
+                  <Bar dataKey="P/D Effect" stackId="a" fill="#459212" />
+                  <Bar dataKey="Distribution" stackId="a" fill="#D4B40A" />
+                  <Bar dataKey="Leverage" stackId="a" fill="#CA3A41" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -102,25 +102,25 @@ export function FactorsSection({ data }: Props) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-8 lg:grid-cols-2">
         {/* Factor Exposures Chart */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Factor Exposures</CardTitle>
+            <CardTitle className="text-foreground">Factor Exposures</CardTitle>
             <CardDescription>Regression-based factor loading estimates</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={factorBarData} layout="vertical" margin={{ left: 20, right: 16 }}>
-                  <XAxis type="number" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} width={110} />
+                  <XAxis type="number" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} width={110} />
                   <RechartsTooltip
-                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                    contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                   />
                   <Bar dataKey="exposure" name="Exposure" radius={[0, 4, 4, 0]} maxBarSize={14}>
                     {factorBarData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.exposure >= 0 ? "#4a9eff" : "#f87171"} />
+                      <Cell key={`cell-${index}`} fill={entry.exposure >= 0 ? "#117DAE" : "#CA3A41"} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -132,7 +132,7 @@ export function FactorsSection({ data }: Props) {
         {/* Factor Table */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Factor Attribution Detail</CardTitle>
+            <CardTitle className="text-foreground">Factor Attribution Detail</CardTitle>
             <CardDescription>Exposure, t-statistics, and significance for {overview.ticker}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -158,7 +158,7 @@ export function FactorsSection({ data }: Props) {
                       {f.tStat >= 0 ? "+" : ""}{f.tStat.toFixed(1)}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline" className={`text-[10px] ${f.significance === "high" ? "text-success border-success/30" : f.significance === "medium" ? "text-warning border-warning/30" : "text-muted-foreground border-muted-foreground/30"}`}>
+                      <Badge variant="outline" className={`text-[length:var(--gy-text-xs)] ${f.significance === "high" ? "text-success border-success/30" : f.significance === "medium" ? "text-warning border-warning/30" : "text-muted-foreground border-muted-foreground/30"}`}>
                         {f.significance}
                       </Badge>
                     </TableCell>
@@ -173,23 +173,23 @@ export function FactorsSection({ data }: Props) {
       {/* NAV vs Price Chart */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">NAV vs Market Price (60-Day)</CardTitle>
+          <CardTitle className="text-foreground">NAV vs Market Price (60-Day)</CardTitle>
           <CardDescription>Recent NAV and market price history for {overview.ticker}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={navHistory} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
-                <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} interval={9} />
-                <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} domain={["auto", "auto"]} tickFormatter={(v) => `$${v}`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" />
+                <XAxis dataKey="date" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} interval={9} />
+                <YAxis tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} domain={["auto", "auto"]} tickFormatter={(v) => `$${v}`} />
                 <RechartsTooltip
-                  contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                  contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                   formatter={(value: number) => [`$${value.toFixed(2)}`, ""]}
                 />
-                <Legend wrapperStyle={{ fontSize: "12px", color: "oklch(0.60 0.02 250)" }} />
-                <Line type="monotone" dataKey="nav" name="NAV" stroke="#4a9eff" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="price" name="Market Price" stroke="#34d399" strokeWidth={2} dot={false} />
+                <Legend wrapperStyle={{ fontSize: "16px", color: "oklch(0.60 0.02 250)" }} />
+                <Line type="monotone" dataKey="nav" name="NAV" stroke="#117DAE" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="price" name="Market Price" stroke="#459212" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -199,20 +199,20 @@ export function FactorsSection({ data }: Props) {
       {/* Premium/Discount Chart */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Premium / Discount History</CardTitle>
+          <CardTitle className="text-foreground">Premium / Discount History</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[180px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={navPriceWithPremium} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
-                <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} interval={9} />
-                <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" />
+                <XAxis dataKey="date" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} interval={9} />
+                <YAxis tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                 <RechartsTooltip
-                  contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                  contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                   formatter={(value: number) => [`${value.toFixed(2)}%`, "Premium/Discount"]}
                 />
-                <Area type="monotone" dataKey="premium" stroke="#f87171" fill="#f87171" fillOpacity={0.1} strokeWidth={2} />
+                <Area type="monotone" dataKey="premium" stroke="#CA3A41" fill="#CA3A41" fillOpacity={0.1} strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

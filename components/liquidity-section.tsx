@@ -50,9 +50,9 @@ export function LiquiditySection({ data }: Props) {
     "text-destructive"
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="gy-stack">
       {/* Summary Metrics */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:gap-5 md:grid-cols-3 lg:grid-cols-6">
         <LiqMetric label="Overall Index" value={`${liquidity.overallIndex}/100`} className={indexColor} />
         <LiqMetric label="Illiquid %" value={`${liquidity.illiquidPct.toFixed(1)}%`} severity={liquidity.illiquidPct > 15 ? "high" : liquidity.illiquidPct > 5 ? "medium" : "low"} />
         <LiqMetric label="Positions" value={liquidity.holdings.length.toString()} />
@@ -78,22 +78,22 @@ export function LiquiditySection({ data }: Props) {
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-8 lg:grid-cols-2">
         {/* Liquidity Score Bar Chart */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Liquidity Score by Holding</CardTitle>
+            <CardTitle className="text-foreground">Liquidity Score by Holding</CardTitle>
             <CardDescription>Score 0-100 based on ADV proxy and market cap for top 15 positions</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[380px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={scoreBarData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 100]} />
-                  <YAxis type="category" dataKey="ticker" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} width={70} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" horizontal={false} />
+                  <XAxis type="number" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} domain={[0, 100]} />
+                  <YAxis type="category" dataKey="ticker" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} width={70} />
                   <RechartsTooltip
-                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                    contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                     formatter={(value: number, name: string) => {
                       if (name === "score") return [`${value}/100`, "Liquidity Score"]
                       return [`${value}%`, "Weight"]
@@ -101,7 +101,7 @@ export function LiquiditySection({ data }: Props) {
                   />
                   <Bar dataKey="score" radius={[0, 4, 4, 0]} maxBarSize={14}>
                     {scoreBarData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.score >= 70 ? "#34d399" : entry.score >= 40 ? "#fbbf24" : "#f87171"} />
+                      <Cell key={`cell-${index}`} fill={entry.score >= 70 ? "#459212" : entry.score >= 40 ? "#D4B40A" : "#CA3A41"} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -118,19 +118,19 @@ export function LiquiditySection({ data }: Props) {
         {/* ADV vs Score Scatter */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">ADV Proxy vs Liquidity Score</CardTitle>
+            <CardTitle className="text-foreground">ADV Proxy vs Liquidity Score</CardTitle>
             <CardDescription>Bubble size = portfolio weight</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[380px]">
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
-                  <XAxis type="number" dataKey="x" name="ADV ($M)" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} label={{ value: "ADV Proxy ($M)", position: "insideBottom", offset: -5, fill: "oklch(0.60 0.02 250)", fontSize: 10 }} />
-                  <YAxis type="number" dataKey="y" name="Score" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 100]} label={{ value: "Liquidity Score", angle: -90, position: "insideLeft", fill: "oklch(0.60 0.02 250)", fontSize: 10 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" />
+                  <XAxis type="number" dataKey="x" name="ADV ($M)" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} label={{ value: "ADV Proxy ($M)", position: "insideBottom", offset: -5, fill: "#4A5560", fontSize: 13 }} />
+                  <YAxis type="number" dataKey="y" name="Score" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} domain={[0, 100]} label={{ value: "Liquidity Score", angle: -90, position: "insideLeft", fill: "#4A5560", fontSize: 13 }} />
                   <ZAxis type="number" dataKey="z" range={[40, 300]} />
                   <RechartsTooltip
-                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                    contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                     formatter={(value: number, name: string) => {
                       if (name === "ADV ($M)") return [`$${value.toFixed(1)}M`, "ADV"]
                       if (name === "Score") return [`${value}/100`, "Score"]
@@ -138,7 +138,7 @@ export function LiquiditySection({ data }: Props) {
                     }}
                     labelFormatter={(_, payload) => payload?.[0]?.payload?.name || ""}
                   />
-                  <Scatter data={scatterData} fill="#4a9eff" fillOpacity={0.7} />
+                  <Scatter data={scatterData} fill="#117DAE" fillOpacity={0.7} />
                 </ScatterChart>
               </ResponsiveContainer>
             </div>
@@ -149,7 +149,7 @@ export function LiquiditySection({ data }: Props) {
       {/* Full Liquidity Table */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Holdings Liquidity Detail</CardTitle>
+          <CardTitle className="text-foreground">Holdings Liquidity Detail</CardTitle>
           <CardDescription>Per-holding liquidity assessment for {overview.ticker}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -196,8 +196,8 @@ export function LiquiditySection({ data }: Props) {
 
 function LiqMetric({ label, value, severity, className }: { label: string; value: string; severity?: "high" | "medium" | "low"; className?: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-5">
+      <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">{label}</span>
       <span className={`font-mono text-sm font-semibold capitalize ${
         className ? className :
         severity === "high" ? "text-destructive" : severity === "medium" ? "text-warning" : "text-foreground"

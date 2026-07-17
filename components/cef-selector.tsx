@@ -7,6 +7,15 @@ import { Input } from "@/components/ui/input"
 
 const CATEGORIES = ["all", "equity", "fixed-income", "infrastructure", "reit", "multi-asset"] as const
 
+const CATEGORY_LABELS: Record<(typeof CATEGORIES)[number], string> = {
+  all: "All funds",
+  equity: "Stocks",
+  "fixed-income": "Bonds",
+  infrastructure: "Infrastructure",
+  reit: "Real estate",
+  "multi-asset": "Mixed",
+}
+
 interface Props {
   funds: CEFProfile[]
   selectedTicker: string
@@ -19,87 +28,119 @@ export function CefSelector({ funds, selectedTicker, onSelect }: Props) {
 
   const filtered = useMemo(() => {
     let list = funds
-    if (category !== "all") list = list.filter(f => f.overview.category === category)
+    if (category !== "all") list = list.filter((f) => f.overview.category === category)
     if (search.trim()) {
       const q = search.toLowerCase()
-      list = list.filter(f =>
-        f.overview.ticker.toLowerCase().includes(q) ||
-        f.overview.name.toLowerCase().includes(q) ||
-        f.overview.sponsor.toLowerCase().includes(q)
+      list = list.filter(
+        (f) =>
+          f.overview.ticker.toLowerCase().includes(q) ||
+          f.overview.name.toLowerCase().includes(q) ||
+          f.overview.sponsor.toLowerCase().includes(q),
       )
     }
     return list
   }, [funds, search, category])
 
   return (
-    <div className="flex flex-col gap-2">
-      {/* Search + Category Filter */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+    <div className="flex flex-col gap-4">
+      <div>
+        <p className="text-[length:var(--gy-text-base)] font-bold text-foreground">
+          Pick a fund
+        </p>
+        <p className="mt-1 text-[length:var(--gy-text-sm)] leading-[var(--gy-leading)] text-muted-foreground">
+          Search or filter, then tap a ticker to open its details.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-md flex-1">
+          <Search
+            className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
           <Input
-            type="text"
-            placeholder="Search ticker, name, sponsor..."
+            type="search"
+            placeholder="Type a ticker, fund name, or manager…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="h-8 pl-8 text-xs bg-card"
+            onChange={(e) => setSearch(e.target.value)}
+            className="min-h-12 bg-card pl-11 text-[length:var(--gy-text-base)]"
+            aria-label="Search funds"
           />
         </div>
-        <div className="flex gap-1 overflow-x-auto">
-          {CATEGORIES.map(cat => (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Fund type">
+          {CATEGORIES.map((cat) => (
             <button
               key={cat}
+              type="button"
               onClick={() => setCategory(cat)}
-              className={`shrink-0 rounded-md px-2.5 py-1 text-[10px] font-medium capitalize transition-colors ${
+              className={`min-h-12 shrink-0 rounded-lg px-4 text-[length:var(--gy-text-sm)] font-semibold transition-colors ${
                 category === cat
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-[var(--gy-blue)] text-white"
                   : "bg-secondary text-muted-foreground hover:text-foreground"
               }`}
             >
-              {cat === "all" ? `All (${funds.length})` : cat.replace("-", " ")}
+              {cat === "all"
+                ? `${CATEGORY_LABELS[cat]} (${funds.length})`
+                : CATEGORY_LABELS[cat]}
             </button>
           ))}
         </div>
-        <span className="hidden text-[10px] text-muted-foreground sm:inline">
-          {filtered.length} fund{filtered.length !== 1 ? "s" : ""}
+        <span className="text-[length:var(--gy-text-sm)] text-muted-foreground">
+          Showing {filtered.length}
         </span>
       </div>
 
-      {/* Fund Chips */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1" role="listbox" aria-label="Fund selector">
+      <div
+        className="flex gap-3 overflow-x-auto pb-2"
+        role="listbox"
+        aria-label="Fund selector"
+      >
         {filtered.map((fund) => {
           const o = fund.overview
           const isSelected = o.ticker === selectedTicker
+          const isPremium = o.premiumDiscount >= 0
 
           return (
             <button
               key={o.ticker}
+              type="button"
               role="option"
               aria-selected={isSelected}
               onClick={() => onSelect(o.ticker)}
-              className={`flex shrink-0 flex-col gap-0.5 rounded-lg border px-3 py-2 text-left transition-all ${
+              className={`flex min-h-14 shrink-0 flex-col justify-center gap-1 rounded-xl border px-4 py-3 text-left transition-all ${
                 isSelected
-                  ? "border-primary bg-primary/10"
-                  : "border-border bg-card hover:border-primary/30"
+                  ? "border-[var(--gy-blue)] bg-[var(--gy-blue-soft)]"
+                  : "border-border bg-card hover:border-[var(--gy-blue)]/40"
               }`}
             >
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono text-xs font-bold text-foreground">{o.ticker}</span>
-                <span className={`font-mono text-[10px] ${o.premiumDiscount >= 0 ? "text-success" : "text-destructive"}`}>
-                  {o.premiumDiscount >= 0 ? "+" : ""}{o.premiumDiscount.toFixed(1)}%
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[length:var(--gy-text-base)] font-bold text-foreground">
+                  {o.ticker}
                 </span>
-                {o.premiumDiscount >= 0 ? (
-                  <TrendingUp className="h-2.5 w-2.5 text-success" />
+                <span
+                  className={`font-mono text-[length:var(--gy-text-sm)] font-semibold ${
+                    isPremium ? "text-[var(--gy-danger)]" : "text-[var(--gy-success)]"
+                  }`}
+                >
+                  {isPremium ? "+" : ""}
+                  {o.premiumDiscount.toFixed(1)}%
+                </span>
+                {isPremium ? (
+                  <TrendingUp className="h-4 w-4 text-[var(--gy-danger)]" aria-hidden />
                 ) : (
-                  <TrendingDown className="h-2.5 w-2.5 text-destructive" />
+                  <TrendingDown className="h-4 w-4 text-[var(--gy-success)]" aria-hidden />
                 )}
               </div>
-              <span className="text-[9px] text-muted-foreground">{o.distributionRate}% dist</span>
+              <span className="text-[length:var(--gy-text-sm)] text-muted-foreground">
+                {o.distributionRate}% income rate
+              </span>
             </button>
           )
         })}
         {filtered.length === 0 && (
-          <span className="px-4 py-2 text-xs text-muted-foreground">No funds match filter</span>
+          <span className="px-4 py-4 text-[length:var(--gy-text-base)] text-muted-foreground">
+            No funds match. Try clearing the search or picking “All funds.”
+          </span>
         )}
       </div>
     </div>

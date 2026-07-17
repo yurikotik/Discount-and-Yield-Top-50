@@ -41,16 +41,16 @@ export function RiskSection({ data }: Props) {
 
   // Risk summary bars
   const riskBars = [
-    { label: "Leverage", value: risk.leverageRatio, max: 50, color: risk.leverageRatio > 30 ? "#f87171" : risk.leverageRatio > 15 ? "#fbbf24" : "#34d399" },
-    { label: "Volatility 1Y", value: risk.volatility1Y, max: 25, color: risk.volatility1Y > 18 ? "#f87171" : risk.volatility1Y > 12 ? "#fbbf24" : "#34d399" },
-    { label: "Expense Ratio", value: risk.expenseRatio, max: 4, color: risk.expenseRatio > 2.5 ? "#f87171" : risk.expenseRatio > 1.5 ? "#fbbf24" : "#34d399" },
-    { label: "Drawdown", value: Math.abs(risk.drawdownFromPeak), max: 15, color: Math.abs(risk.drawdownFromPeak) > 10 ? "#f87171" : Math.abs(risk.drawdownFromPeak) > 5 ? "#fbbf24" : "#34d399" },
+    { label: "Leverage", value: risk.leverageRatio, max: 50, color: risk.leverageRatio > 30 ? "#CA3A41" : risk.leverageRatio > 15 ? "#D4B40A" : "#459212" },
+    { label: "Volatility 1Y", value: risk.volatility1Y, max: 25, color: risk.volatility1Y > 18 ? "#CA3A41" : risk.volatility1Y > 12 ? "#D4B40A" : "#459212" },
+    { label: "Expense Ratio", value: risk.expenseRatio, max: 4, color: risk.expenseRatio > 2.5 ? "#CA3A41" : risk.expenseRatio > 1.5 ? "#D4B40A" : "#459212" },
+    { label: "Drawdown", value: Math.abs(risk.drawdownFromPeak), max: 15, color: Math.abs(risk.drawdownFromPeak) > 10 ? "#CA3A41" : Math.abs(risk.drawdownFromPeak) > 5 ? "#D4B40A" : "#459212" },
   ]
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="gy-stack">
       {/* Risk Summary Grid */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-2 gap-4 md:gap-5 md:grid-cols-4 lg:grid-cols-8">
         <RiskMetric label="Leverage" value={`${risk.leverageRatio}%`} severity={risk.leverageRatio > 30 ? "high" : risk.leverageRatio > 15 ? "medium" : "low"} />
         <RiskMetric label="Lev. Type" value={risk.leverageType.split("+")[0].trim()} />
         <RiskMetric label="Lev. Cost" value={risk.leverageCost} />
@@ -64,7 +64,7 @@ export function RiskSection({ data }: Props) {
       {/* Risk Gauge Bars */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Risk Factor Gauges</CardTitle>
+          <CardTitle className="text-foreground">Risk Factor Gauges</CardTitle>
           <CardDescription>Key risk factors relative to their typical ranges</CardDescription>
         </CardHeader>
         <CardContent>
@@ -90,25 +90,25 @@ export function RiskSection({ data }: Props) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-8 lg:grid-cols-2">
         {/* Premium/Discount History */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">Premium / Discount History</CardTitle>
+            <CardTitle className="text-foreground">Premium / Discount History</CardTitle>
             <CardDescription>Current: {risk.premiumDiscountCurrent >= 0 ? "+" : ""}{risk.premiumDiscountCurrent.toFixed(1)}% | 1Y Avg: {risk.premiumDiscount1YAvg >= 0 ? "+" : ""}{risk.premiumDiscount1YAvg.toFixed(1)}%</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={pdHistory} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
-                  <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} interval={5} />
-                  <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" />
+                  <XAxis dataKey="date" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} interval={5} />
+                  <YAxis tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                   <RechartsTooltip
-                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                    contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                     formatter={(value: number) => [`${value.toFixed(2)}%`, "Premium/Discount"]}
                   />
-                  <Area type="monotone" dataKey="pd" stroke="#f87171" fill="#f87171" fillOpacity={0.1} strokeWidth={2} />
+                  <Area type="monotone" dataKey="pd" stroke="#CA3A41" fill="#CA3A41" fillOpacity={0.1} strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -118,21 +118,21 @@ export function RiskSection({ data }: Props) {
         {/* Drawdown Chart */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-foreground">NAV Drawdown from Peak</CardTitle>
+            <CardTitle className="text-foreground">NAV Drawdown from Peak</CardTitle>
             <CardDescription>Max 1Y drawdown: {performance.maxDrawdown1Y.toFixed(1)}%</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={drawdownData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0.02 250)" />
-                  <XAxis dataKey="date" tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 10 }} axisLine={false} tickLine={false} interval={5} />
-                  <YAxis tick={{ fill: "oklch(0.60 0.02 250)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} domain={["auto", 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" />
+                  <XAxis dataKey="date" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} interval={5} />
+                  <YAxis tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} domain={["auto", 0]} />
                   <RechartsTooltip
-                    contentStyle={{ backgroundColor: "oklch(0.16 0.018 250)", border: "1px solid oklch(0.25 0.02 250)", borderRadius: "8px", color: "oklch(0.95 0.01 250)", fontSize: "12px" }}
+                    contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                     formatter={(value: number) => [`${value.toFixed(2)}%`, "Drawdown"]}
                   />
-                  <Area type="monotone" dataKey="drawdown" stroke="#f87171" fill="#f87171" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="drawdown" stroke="#CA3A41" fill="#CA3A41" fillOpacity={0.15} strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -143,11 +143,11 @@ export function RiskSection({ data }: Props) {
       {/* Performance Summary */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Performance Snapshot</CardTitle>
+          <CardTitle className="text-foreground">Performance Snapshot</CardTitle>
           <CardDescription>Returns and risk-adjusted metrics for {overview.ticker}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 md:gap-5 md:grid-cols-5">
             <PerfCell label="YTD" value={`${performance.returnYTD.toFixed(1)}%`} positive={performance.returnYTD >= 0} />
             <PerfCell label="1Y Total" value={`${performance.return1Y.toFixed(1)}%`} positive={performance.return1Y >= 0} />
             <PerfCell label="3Y Ann." value={`${performance.return3Y.toFixed(1)}%`} positive={performance.return3Y >= 0} />
@@ -163,7 +163,7 @@ export function RiskSection({ data }: Props) {
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warning" />
-              <CardTitle className="text-sm text-foreground">Risk Caveats & Disclaimers</CardTitle>
+              <CardTitle className="text-foreground">Risk Caveats & Disclaimers</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -184,8 +184,8 @@ export function RiskSection({ data }: Props) {
 
 function RiskMetric({ label, value, severity }: { label: string; value: string; severity?: "high" | "medium" | "low" }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-5">
+      <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">{label}</span>
       <span className={`font-mono text-sm font-semibold ${
         severity === "high" ? "text-destructive" : severity === "medium" ? "text-warning" : "text-foreground"
       }`}>
@@ -198,8 +198,8 @@ function RiskMetric({ label, value, severity }: { label: string; value: string; 
 function PerfCell({ label, value, positive }: { label: string; value: string; positive: boolean }) {
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-border bg-secondary/20 p-3 text-center">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
-      <span className={`font-mono text-lg font-bold ${positive ? "text-success" : "text-destructive"}`}>{value}</span>
+      <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className={`font-mono text-base font-bold ${positive ? "text-success" : "text-destructive"}`}>{value}</span>
     </div>
   )
 }

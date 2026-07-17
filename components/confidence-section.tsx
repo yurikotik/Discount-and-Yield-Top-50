@@ -99,9 +99,9 @@ export function ConfidenceSection({ data }: Props) {
     "text-destructive border-destructive/30"
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="gy-stack">
       {/* Quality Score + Distribution Score */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-7">
+      <div className="grid grid-cols-2 gap-4 md:gap-5 md:grid-cols-3 lg:grid-cols-7">
         <QualityCard label="Intelligence Score" value={`${confidence.qualityScore}/100`} className={qualityColor} />
         <QualityCard label="Distribution Score" value={`${confidence.distributionScore}/100`} className={distColor} />
         <QualityCard label="Holdings Age" value={`${confidence.holdingsAge}d`} severity={confidence.holdingsAge > 60 ? "medium" : "low"} />
@@ -111,13 +111,13 @@ export function ConfidenceSection({ data }: Props) {
         <QualityCard label="Invalidations" value={confidence.invalidationConditions.length.toString()} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-8 lg:grid-cols-2">
         {/* Quality Assessment */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-primary" />
-              <CardTitle className="text-sm text-foreground">Intelligence Quality Assessment</CardTitle>
+              <CardTitle className="text-foreground">Intelligence Quality Assessment</CardTitle>
             </div>
             <CardDescription>Overall confidence in the X-ray analysis</CardDescription>
           </CardHeader>
@@ -131,14 +131,14 @@ export function ConfidenceSection({ data }: Props) {
                     <path
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                       fill="none"
-                      stroke={confidence.qualityScore >= 75 ? "#34d399" : confidence.qualityScore >= 50 ? "#fbbf24" : "#f87171"}
+                      stroke={confidence.qualityScore >= 75 ? "#459212" : confidence.qualityScore >= 50 ? "#D4B40A" : "#CA3A41"}
                       strokeWidth="3"
                       strokeDasharray={`${confidence.qualityScore}, 100`}
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={`font-mono text-lg font-bold ${qualityColor}`}>{confidence.qualityScore}</span>
+                    <span className={`font-mono text-base font-bold ${qualityColor}`}>{confidence.qualityScore}</span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -161,7 +161,7 @@ export function ConfidenceSection({ data }: Props) {
                 <div className="rounded-lg border border-border bg-secondary/20 p-3">
                   <div className="flex items-center gap-2">
                     <Database className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Data Completeness</span>
+                    <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">Data Completeness</span>
                   </div>
                   <div className="mt-2 h-2 w-full rounded-full bg-secondary">
                     <div className="h-2 rounded-full bg-primary transition-all" style={{ width: `${confidence.dataCompleteness}%` }} />
@@ -171,10 +171,10 @@ export function ConfidenceSection({ data }: Props) {
                 <div className="rounded-lg border border-border bg-secondary/20 p-3">
                   <div className="flex items-center gap-2">
                     <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Holdings Freshness</span>
+                    <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">Holdings Freshness</span>
                   </div>
                   <div className="mt-2 h-2 w-full rounded-full bg-secondary">
-                    <div className="h-2 rounded-full transition-all" style={{ width: `${Math.max(0, 100 - confidence.holdingsAge)}%`, backgroundColor: confidence.holdingsAge > 60 ? "#fbbf24" : "#34d399" }} />
+                    <div className="h-2 rounded-full transition-all" style={{ width: `${Math.max(0, 100 - confidence.holdingsAge)}%`, backgroundColor: confidence.holdingsAge > 60 ? "#D4B40A" : "#459212" }} />
                   </div>
                   <span className="mt-1 block font-mono text-xs text-foreground">{confidence.holdingsAge} days old</span>
                 </div>
@@ -192,7 +192,7 @@ export function ConfidenceSection({ data }: Props) {
               ) : (
                 <AlertTriangle className="h-4 w-4 text-warning" />
               )}
-              <CardTitle className="text-sm text-foreground">Distribution Sustainability</CardTitle>
+              <CardTitle className="text-foreground">Distribution Sustainability</CardTitle>
             </div>
             <CardDescription>Score: {confidence.distributionScore}/100 for {overview.ticker}</CardDescription>
           </CardHeader>
@@ -206,14 +206,14 @@ export function ConfidenceSection({ data }: Props) {
                     <path
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                       fill="none"
-                      stroke={confidence.distributionScore >= 70 ? "#34d399" : confidence.distributionScore >= 40 ? "#fbbf24" : "#f87171"}
+                      stroke={confidence.distributionScore >= 70 ? "#459212" : confidence.distributionScore >= 40 ? "#D4B40A" : "#CA3A41"}
                       strokeWidth="3"
                       strokeDasharray={`${confidence.distributionScore}, 100`}
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={`font-mono text-lg font-bold ${distColor}`}>{confidence.distributionScore}</span>
+                    <span className={`font-mono text-base font-bold ${distColor}`}>{confidence.distributionScore}</span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -229,7 +229,7 @@ export function ConfidenceSection({ data }: Props) {
               {/* Red Flags */}
               {confidence.distributionRedFlags.length > 0 && (
                 <div className="flex flex-col gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Red Flags</span>
+                  <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">Red Flags</span>
                   {confidence.distributionRedFlags.map((flag, i) => (
                     <div key={i} className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-2.5">
                       <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-destructive" />
@@ -246,7 +246,7 @@ export function ConfidenceSection({ data }: Props) {
       {/* Invalidation Conditions */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-foreground">Invalidation Conditions</CardTitle>
+          <CardTitle className="text-foreground">Invalidation Conditions</CardTitle>
           <CardDescription>Conditions that could reduce the reliability of this X-ray analysis</CardDescription>
         </CardHeader>
         <CardContent>
@@ -267,7 +267,7 @@ export function ConfidenceSection({ data }: Props) {
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warning" />
-              <CardTitle className="text-sm text-foreground">Fund-Specific Caveats</CardTitle>
+              <CardTitle className="text-foreground">Fund-Specific Caveats</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -289,7 +289,7 @@ export function ConfidenceSection({ data }: Props) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" />
-              <CardTitle className="text-sm text-foreground">X-Ray Prompt Template</CardTitle>
+              <CardTitle className="text-foreground">X-Ray Prompt Template</CardTitle>
             </div>
             <Button
               variant="outline"
@@ -315,8 +315,8 @@ export function ConfidenceSection({ data }: Props) {
 
 function QualityCard({ label, value, severity, className }: { label: string; value: string; severity?: "high" | "medium" | "low"; className?: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-5">
+      <span className="text-[length:var(--gy-text-xs)] uppercase tracking-wider text-muted-foreground">{label}</span>
       <span className={`font-mono text-sm font-semibold ${
         className ? className :
         severity === "high" ? "text-destructive" : severity === "medium" ? "text-warning" : "text-foreground"
