@@ -73,7 +73,7 @@ export function DashboardHeader({ profile, fundCount, totalAum, viewMode, fetche
                 <MetricPill label="Fund value (NAV)" value={`$${o.navPerShare.toFixed(2)}`} />
                 <MetricPill label="Market price" value={`$${o.marketPrice.toFixed(2)}`} />
                 <MetricPill
-                  label="Discount / premium"
+                  label="NAV Discount"
                   value={`${o.premiumDiscount >= 0 ? "+" : ""}${o.premiumDiscount.toFixed(1)}%`}
                   icon={
                     o.premiumDiscount >= 0 ? (
@@ -84,7 +84,7 @@ export function DashboardHeader({ profile, fundCount, totalAum, viewMode, fetche
                   }
                   valueClass={o.premiumDiscount >= 0 ? "text-success" : "text-destructive"}
                 />
-                <MetricPill label="Income rate" value={`${o.distributionRate}%`} />
+                <MetricPill label="Current Yield" value={`${o.distributionRate}%`} />
                 <MetricPill
                   label="Borrowing"
                   value={o.leverageRatio > 0 ? `${o.leverageRatio}%` : "None"}

@@ -44,6 +44,8 @@ export function PortfolioOverview({
   const levFunds = funds.filter((f) => f.overview.leverageRatio > 0).length
   const avgExpense = funds.reduce((s, f) => s + f.overview.expenseRatio, 0) / funds.length
   const avgReturn = funds.reduce((s, f) => s + f.performance.return1Y, 0) / funds.length
+  const avgDiscount =
+    funds.reduce((s, f) => s + f.overview.premiumDiscount, 0) / funds.length
 
   const rankBarData = rankings.map((r) => ({
     ticker: r.ticker,
@@ -73,10 +75,14 @@ export function PortfolioOverview({
         <p className="gy-section-help">
           Quick averages across the list. Numbers update when new data is fetched.
         </p>
-        <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           <StatCard label="Total size" value={`$${totalAum.toFixed(1)}B`} />
           <StatCard label="Avg 1-year return" value={`${avgReturn.toFixed(1)}%`} />
-          <StatCard label="Avg income rate" value={`${avgDist.toFixed(1)}%`} />
+          <StatCard label="Average Current Yield" value={`${avgDist.toFixed(1)}%`} />
+          <StatCard
+            label="Average NAV Discount"
+            value={`${avgDiscount >= 0 ? "+" : ""}${avgDiscount.toFixed(1)}%`}
+          />
           <StatCard label="Avg borrowing" value={`${avgLev.toFixed(1)}%`} />
           <StatCard label="Avg expense" value={`${avgExpense.toFixed(2)}%`} />
           <StatCard label="Funds that borrow" value={`${levFunds} of ${funds.length}`} />
@@ -145,7 +151,7 @@ export function PortfolioOverview({
                 <div className="mt-auto grid grid-cols-2 gap-3">
                   <Metric label="Size" value={`$${o.aum.toFixed(1)}B`} />
                   <Metric
-                    label="Discount"
+                    label="NAV Discount"
                     value={`${o.premiumDiscount >= 0 ? "+" : ""}${o.premiumDiscount.toFixed(1)}%`}
                     icon={
                       o.premiumDiscount >= 0 ? (
@@ -160,7 +166,7 @@ export function PortfolioOverview({
                         : "text-[var(--gy-success)]"
                     }
                   />
-                  <Metric label="Income rate" value={`${o.distributionRate}%`} />
+                  <Metric label="Current Yield" value={`${o.distributionRate}%`} />
                   <Metric
                     label="1-year return"
                     value={`${fund.performance.return1Y.toFixed(1)}%`}
@@ -219,7 +225,7 @@ export function PortfolioOverview({
 
         <Card className="border-border bg-card">
           <CardHeader className="pb-3">
-            <CardTitle className="text-foreground">Income rate vs borrowing</CardTitle>
+            <CardTitle className="text-foreground">Current Yield vs borrowing</CardTitle>
             <CardDescription>
               Larger bubbles = larger funds. Farther right = more borrowing.
             </CardDescription>
@@ -254,7 +260,7 @@ export function PortfolioOverview({
                     tickLine={false}
                     tickFormatter={(v) => `${v}%`}
                     label={{
-                      value: "Dist Rate %",
+                      value: "Current Yield %",
                       angle: -90,
                       position: "insideLeft",
                       fill: GY_CHART.tick,
@@ -266,7 +272,7 @@ export function PortfolioOverview({
                     contentStyle={gyTooltipStyle}
                     formatter={(value: number, name: string) => {
                       if (name === "Leverage") return [`${value}%`, "Leverage"]
-                      if (name === "Yield") return [`${value}%`, "Dist Rate"]
+                      if (name === "Yield") return [`${value}%`, "Current Yield"]
                       return [`$${value.toFixed(1)}B`, "AUM"]
                     }}
                     labelFormatter={(_, payload) => payload?.[0]?.payload?.name || ""}
@@ -367,8 +373,8 @@ export function PortfolioOverview({
                   "Ticker",
                   "Type",
                   "Size",
-                  "Discount",
-                  "Income",
+                  "NAV Discount",
+                  "Current Yield",
                   "Borrowing",
                   "Expense",
                   "1Y return",
@@ -381,8 +387,8 @@ export function PortfolioOverview({
                     className={`px-3 py-3 text-[length:var(--gy-text-sm)] text-muted-foreground ${
                       [
                         "Size",
-                        "Discount",
-                        "Income",
+                        "NAV Discount",
+                        "Current Yield",
                         "Borrowing",
                         "Expense",
                         "1Y return",

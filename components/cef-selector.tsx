@@ -132,7 +132,7 @@ export function CefSelector({ funds, selectedTicker, onSelect }: Props) {
                 )}
               </div>
               <span className="text-[length:var(--gy-text-sm)] text-muted-foreground">
-                {o.distributionRate}% income rate
+                {o.distributionRate}% Current Yield
               </span>
             </button>
           )

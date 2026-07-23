@@ -54,7 +54,7 @@ export function FundComparison({ funds, rankings, onNavigateToFund }: Props) {
 
   // Radar chart: normalize metrics to 0-100 for top 5 funds by ranking
   const top5Tickers = rankings.slice(0, 5).map(r => r.ticker)
-  const radarMetrics = ["Yield", "Discount", "Low Vol", "Low Lev", "Return", "Sharpe"]
+  const radarMetrics = ["Current Yield", "NAV Discount", "Low Vol", "Low Lev", "Return", "Sharpe"]
   
   const maxes = {
     yield: Math.max(...funds.map(f => f.overview.distributionRate)),
@@ -120,22 +120,22 @@ export function FundComparison({ funds, rankings, onNavigateToFund }: Props) {
         {/* P/D vs Distribution Rate Scatter */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-foreground">Premium/Discount vs Distribution Rate</CardTitle>
-            <CardDescription>Funds at discount with high yield are in the lower-right quadrant</CardDescription>
+            <CardTitle className="text-foreground">NAV Discount vs Current Yield</CardTitle>
+            <CardDescription>Funds at NAV discount with high current yield are in the lower-right quadrant</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#D9D2C8" />
-                  <XAxis type="number" dataKey="x" name="P/D" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} label={{ value: "Premium/Discount %", position: "insideBottom", offset: -5, fill: "#4A5560", fontSize: 13 }} />
-                  <YAxis type="number" dataKey="y" name="Dist Rate" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} label={{ value: "Dist Rate %", angle: -90, position: "insideLeft", fill: "#4A5560", fontSize: 13 }} />
+                  <XAxis type="number" dataKey="x" name="P/D" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} label={{ value: "NAV Discount %", position: "insideBottom", offset: -5, fill: "#4A5560", fontSize: 13 }} />
+                  <YAxis type="number" dataKey="y" name="Dist Rate" tick={{ fill: "#4A5560", fontSize: 13 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} label={{ value: "Current Yield %", angle: -90, position: "insideLeft", fill: "#4A5560", fontSize: 13 }} />
                   <ZAxis type="number" dataKey="z" range={[60, 400]} />
                   <RechartsTooltip
                     contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #D9D2C8", borderRadius: "8px", color: "#1B242C", fontSize: "16px" }}
                     formatter={(value: number, name: string) => {
                       if (name === "P/D") return [`${value.toFixed(1)}%`, "P/D"]
-                      if (name === "Dist Rate") return [`${value.toFixed(1)}%`, "Dist Rate"]
+                      if (name === "Dist Rate") return [`${value.toFixed(1)}%`, "Current Yield"]
                       return [`$${value.toFixed(1)}B`, "AUM"]
                     }}
                     labelFormatter={(_, payload) => payload?.[0]?.payload?.name || ""}
@@ -192,7 +192,7 @@ export function FundComparison({ funds, rankings, onNavigateToFund }: Props) {
                 <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">Count</TableHead>
                 <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">Total AUM</TableHead>
                 <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">Avg 1Y Return</TableHead>
-                <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">Avg Dist Rate</TableHead>
+                <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">Average Current Yield</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -298,7 +298,7 @@ export function FundComparison({ funds, rankings, onNavigateToFund }: Props) {
                 <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">AUM</TableHead>
                 <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">ADV</TableHead>
                 <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">P/D</TableHead>
-                <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">Yield</TableHead>
+                <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">Current Yield</TableHead>
                 <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">Vol</TableHead>
                 <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">1Y Ret</TableHead>
                 <TableHead className="text-muted-foreground text-[length:var(--gy-text-sm)] text-right">90d Ret</TableHead>
